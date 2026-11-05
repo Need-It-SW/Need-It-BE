@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: NEEDIT-BE
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/needit
+    username: root
+    password: gang0131
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+server:
+  port: 8080
