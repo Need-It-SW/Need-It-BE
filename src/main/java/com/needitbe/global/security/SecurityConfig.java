@@ -70,6 +70,7 @@ public class SecurityConfig {
 
                         // 인증 없이 접근 가능한 API
                         .requestMatchers(
+
                                 "/api/auth/signup",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
@@ -80,6 +81,19 @@ public class SecurityConfig {
                         // 관리자 전용 API
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
+
+                                // 내 요청글 조회는 인증 필수
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/requests/me"
+                                ).authenticated()
+
+// 게시글 목록 및 상세 조회는 공개
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/requests",
+                                        "/api/requests/*"
+                                ).permitAll()
 
                         // 나머지는 모두 인증 필요
                         .anyRequest().authenticated()

@@ -31,9 +31,13 @@ public enum ErrorCode {
 
     // 인증 오류
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_401", "이메일 또는 비밀번호가 올바르지 않습니다."),
-    INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_2", "유효하지 않은 토큰입니다.");
+    INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_2", "유효하지 않은 토큰입니다."),
 
-
+    // 게시글 오류
+    REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "REQUEST_404_1", "요청 게시글을 찾을 수 없습니다."),
+    REQUEST_ACCESS_DENIED(HttpStatus.FORBIDDEN, "REQUEST_403_1", "해당 게시글을 수정할 권한이 없습니다."),
+    REQUEST_ALREADY_CLOSED(HttpStatus.BAD_REQUEST,"REQUEST_400_1","이미 마감된 요청 게시글입니다."),
+    REQUEST_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND,"REQUEST_IMAGE_404_1","요청 게시글 이미지를 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String code;
