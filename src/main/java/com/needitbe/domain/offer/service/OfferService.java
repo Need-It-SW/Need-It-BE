@@ -57,10 +57,11 @@ public class OfferService {
     ) {
 
         // 1. 요청 게시글 조회
-        ItemRequest itemRequest = itemRequestRepository.findById(requestId)
-                .orElseThrow(() ->
-                        new CustomException(ErrorCode.REQUEST_NOT_FOUND)
-                );
+        ItemRequest itemRequest =
+                itemRequestRepository.findByIdForUpdate(requestId)
+                        .orElseThrow(() ->
+                                new CustomException(ErrorCode.REQUEST_NOT_FOUND)
+                        );
 
         // 2. 자기 게시글인지 확인
         if (itemRequest.getMember().getId().equals(memberId)) {
