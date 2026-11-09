@@ -138,4 +138,50 @@ public class S3Service {
                 + ".s3.ap-northeast-2.amazonaws.com/"
                 + imageKey;
     }
+
+    public String uploadOfferImage(MultipartFile file, Long offerId) {
+
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("이미지 파일이 비어 있습니다.");
+        }
+
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new IllegalArgumentException("이미지는 5MB 이하만 업로드할 수 있습니다.");
+        }
+
+        String contentType = file.getContentType();
+
+        if (contentType == null ||
+                !(contentType.equals("image/jpeg")
+                        || contentType.equals("image/png")
+                        || contentType.equals("image/webp"))) {
+            throw new IllegalArgumentException("JPG, PNG, WEBP 이미지만 업로드할 수 있습니다.");
+        }
+
+        String extension = switch (contentType) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            default -> throw new IllegalArgumentException("지원하지 않는 이미지 형식입니다.");
+        };
+
+        String imageKey = "offers/" + offerId + "/"
+                + UUID.randomUUID() + "." + extension;
+
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(imageKey)
+                            .contentType(contentType)
+                            .build(),
+                    RequestBody.fromBytes(file.getBytes())
+            );
+
+            return imageKey;
+
+        } catch (IOException e) {
+            throw new IllegalStateException("이미지 업로드 중 오류가 발생했습니다.", e);
+        }
+    }
 }

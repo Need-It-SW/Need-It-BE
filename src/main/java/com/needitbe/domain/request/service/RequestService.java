@@ -40,11 +40,16 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
+import com.needitbe.domain.offer.repository.OfferRepository;
+import com.needitbe.domain.offer.entity.OfferStatus;
+
+import com.needitbe.domain.offer.repository.OfferRepository;
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RequestService {
 
+    private final OfferRepository offerRepository;
     private final ItemRequestRepository itemRequestRepository;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
@@ -169,6 +174,7 @@ public class RequestService {
 
     // =====================================================
     // =====================================================
+// =====================================================
 // 5. 요청 게시글 삭제 (S3 이미지 함께 삭제)
 // =====================================================
     @Transactional
@@ -177,27 +183,39 @@ public class RequestService {
             Long requestId
     ) {
 
-        // 1. 게시글 조회
-        ItemRequest itemRequest = itemRequestRepository.findById(requestId)
-                .orElseThrow(() ->
-                        new CustomException(ErrorCode.REQUEST_NOT_FOUND)
-                );
+        // 1. 게시글 조회 및 잠금
+        ItemRequest itemRequest =
+                itemRequestRepository.findByIdForUpdate(requestId)
+                        .orElseThrow(() ->
+                                new CustomException(ErrorCode.REQUEST_NOT_FOUND)
+                        );
 
         // 2. 작성자 확인
         if (!itemRequest.getMember().getId().equals(memberId)) {
             throw new CustomException(ErrorCode.REQUEST_ACCESS_DENIED);
         }
 
-        // 3. 삭제할 S3 이미지 키 목록 확보
+        // 3. 제안 존재 여부 확인
+        boolean hasOffers =
+                offerRepository.existsByItemRequestId(requestId);
+
+        // 4. 제안이 하나라도 존재하면 삭제 불가능
+        if (hasOffers) {
+            throw new CustomException(
+                    ErrorCode.REQUEST_HAS_OFFERS
+            );
+        }
+
+        // 5. 삭제할 S3 이미지 키 목록 확보
         List<String> imageKeys = itemRequest.getImages()
                 .stream()
                 .map(ItemRequestImage::getImageKey)
                 .toList();
 
-        // 4. 게시글 및 연결된 이미지 DB 삭제
+        // 6. 게시글 및 연결된 이미지 DB 삭제
         itemRequestRepository.delete(itemRequest);
 
-        // 5. DB 커밋 성공 후 S3 이미지 삭제
+        // 7. DB 커밋 성공 후 S3 이미지 삭제
         if (!imageKeys.isEmpty()) {
 
             TransactionSynchronizationManager.registerSynchronization(
@@ -230,19 +248,20 @@ public class RequestService {
     }
 
     // =====================================================
-    // 6. 요청 게시글 마감
-    // =====================================================
+// 6. 요청 게시글 마감
+// =====================================================
     @Transactional
     public RequestResponse closeRequest(
             Long memberId,
             Long requestId
     ) {
 
-        // 1. 게시글 조회
-        ItemRequest itemRequest = itemRequestRepository.findById(requestId)
-                .orElseThrow(() ->
-                        new CustomException(ErrorCode.REQUEST_NOT_FOUND)
-                );
+        // 1. 게시글 조회 및 잠금
+        ItemRequest itemRequest =
+                itemRequestRepository.findByIdForUpdate(requestId)
+                        .orElseThrow(() ->
+                                new CustomException(ErrorCode.REQUEST_NOT_FOUND)
+                        );
 
         // 2. 작성자 확인
         if (!itemRequest.getMember().getId().equals(memberId)) {
@@ -254,10 +273,24 @@ public class RequestService {
             throw new CustomException(ErrorCode.REQUEST_ALREADY_CLOSED);
         }
 
-        // 4. 요청 마감
+        // 4. 수락된 제안이 있는지 확인
+        boolean hasAcceptedOffer =
+                offerRepository.existsByItemRequestIdAndStatus(
+                        requestId,
+                        OfferStatus.ACCEPTED
+                );
+
+        // 5. 수락된 제안이 있다면 직접 마감 불가능
+        if (hasAcceptedOffer) {
+            throw new CustomException(
+                    ErrorCode.REQUEST_HAS_ACCEPTED_OFFER
+            );
+        }
+
+        // 6. 요청 게시글 마감
         itemRequest.close();
 
-        // 5. 결과 반환
+        // 7. 결과 반환
         return toResponse(itemRequest);
     }
 
