@@ -184,4 +184,48 @@ public class S3Service {
             throw new IllegalStateException("이미지 업로드 중 오류가 발생했습니다.", e);
         }
     }
+
+    // 채팅 이미지 업로드
+    // 채팅 이미지 업로드
+    public String uploadChatImage(
+            MultipartFile file,
+            Long chatRoomId
+    ) {
+        validateImage(file);
+
+        String extension = switch (file.getContentType()) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/webp" -> ".webp";
+            default -> throw new IllegalArgumentException(
+                    "지원하지 않는 이미지 형식입니다."
+            );
+        };
+
+        String imageKey = "chats/"
+                + chatRoomId
+                + "/"
+                + UUID.randomUUID()
+                + extension;
+
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(imageKey)
+                            .contentType(file.getContentType())
+                            .build(),
+                    RequestBody.fromBytes(file.getBytes())
+            );
+
+            return imageKey;
+
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "채팅 이미지 업로드에 실패했습니다.", e
+            );
+        }
+    }
+
+
 }

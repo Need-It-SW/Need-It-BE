@@ -49,7 +49,15 @@ public enum ErrorCode {
     OFFER_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, "OFFER_003", "이미 처리된 제안입니다."),
     OFFER_ALREADY_ACCEPTED(HttpStatus.CONFLICT, "OFFER_004", "이미 수락된 제안이 존재합니다."),
     OFFER_NOT_ACCEPTED(HttpStatus.BAD_REQUEST, "OFFER_005", "수락된 제안만 거래 완료할 수 있습니다."),
-    OFFER_ALREADY_COMPLETED(HttpStatus.CONFLICT, "OFFER_006", "이미 완료된 거래입니다.");
+    OFFER_ALREADY_COMPLETED(HttpStatus.CONFLICT, "OFFER_006", "이미 완료된 거래입니다."),
+
+
+    //채팅 오류
+    CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND,"CHAT_001","채팅방을 찾을 수 없습니다."),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CHAT_002","채팅방에 접근할 권한이 없습니다."),
+    CHAT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "CHAT_003","현재 메시지를 전송할 수 없는 채팅방입니다.");
+
+
     private final HttpStatus status;
     private final String code;
     private final String message;

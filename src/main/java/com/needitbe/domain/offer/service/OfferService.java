@@ -35,6 +35,9 @@ import com.needitbe.domain.offer.dto.OfferAcceptanceCancelRequest;
 import com.needitbe.domain.offer.entity.OfferAcceptanceCancellation;
 import com.needitbe.domain.offer.repository.OfferAcceptanceCancellationRepository;
 
+import com.needitbe.domain.chat.entity.ChatRoom;
+import com.needitbe.domain.chat.repository.ChatRoomRepository;
+
 @Service
 @RequiredArgsConstructor
 public class OfferService {
@@ -45,6 +48,7 @@ public class OfferService {
     private final ItemRequestRepository itemRequestRepository;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
+    private final ChatRoomRepository chatRoomRepository;
 
     // =====================================================
     // 1. 물품 제공 제안 등록
@@ -274,7 +278,7 @@ public class OfferService {
     }
 
     // =====================================================
-// 4. 나눔 제안 수락
+// 4. 나눔 제안 수락 + 채팅방 자동 생성
 // =====================================================
     @Transactional
     public OfferResponse acceptOffer(
@@ -290,17 +294,17 @@ public class OfferService {
             throw new CustomException(ErrorCode.OFFER_ACCESS_DENIED);
         }
 
-        // 마감된 요청 게시글은 제안 수락 불가능
+        // 3. 마감된 게시글인지 확인
         if (offer.getItemRequest().getStatus() == RequestStatus.CLOSED) {
             throw new CustomException(ErrorCode.OFFER_REQUEST_CLOSED);
         }
 
-        // 3. 제안 상태 확인
+        // 4. 제안 상태 확인
         if (offer.getStatus() != OfferStatus.PENDING) {
             throw new CustomException(ErrorCode.OFFER_ALREADY_PROCESSED);
         }
 
-        // 4. 이미 수락된 제안이 있는지 확인
+        // 5. 이미 수락된 제안이 있는지 확인
         boolean alreadyAccepted =
                 offerRepository.existsByItemRequestIdAndStatus(
                         offer.getItemRequest().getId(),
@@ -311,12 +315,23 @@ public class OfferService {
             throw new CustomException(ErrorCode.OFFER_ALREADY_ACCEPTED);
         }
 
-        // 5. 제안 수락
+        // 6. 제안 수락
         offer.accept();
 
-        // 6. DB 저장
+        // 7. 제안 상태 저장
         offerRepository.saveAndFlush(offer);
 
+        // 8. 채팅방 중복 생성 방지
+        if (!chatRoomRepository.existsByOfferId(offerId)) {
+
+            // 9. 채팅방 생성
+            ChatRoom chatRoom = new ChatRoom(offer);
+
+            // 10. 채팅방 저장
+            chatRoomRepository.saveAndFlush(chatRoom);
+        }
+
+        // 11. 응답 반환
         return OfferResponse.from(offer);
     }
 
@@ -335,6 +350,10 @@ public class OfferService {
         // 요청 게시글 작성자 확인
         if (!offer.getItemRequest().getMember().getId().equals(memberId)) {
             throw new CustomException(ErrorCode.OFFER_ACCESS_DENIED);
+        }
+
+        if (offer.getItemRequest().getStatus() == RequestStatus.CLOSED) {
+            throw new CustomException(ErrorCode.OFFER_REQUEST_CLOSED);
         }
 
         // 이미 처리된 제안인지 확인

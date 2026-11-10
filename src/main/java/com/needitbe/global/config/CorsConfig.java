@@ -17,7 +17,8 @@ public class CorsConfig {
 
         // 허용할 프론트엔드 주소
         config.setAllowedOrigins(List.of(
-                "http://localhost:5173"
+                "http://localhost:5173",
+                "http://127.0.0.1:5173"
         ));
 
         // 허용할 HTTP 메서드

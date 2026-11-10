@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -31,7 +32,38 @@ public class SecurityConfig {
         return registration;
     }
 
+    // 1. WebSocket 연결 전용 SecurityFilterChain
     @Bean
+    @Order(1)
+    public SecurityFilterChain webSocketSecurityFilterChain(
+            HttpSecurity http
+    ) throws Exception {
+
+        http
+                .securityMatcher("/ws", "/ws/**")
+
+                .cors(cors -> {})
+
+                .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
+
+                .authorizeHttpRequests(auth ->
+                        auth.anyRequest().permitAll()
+                );
+
+        return http.build();
+    }
+
+    // 2. 기존 REST API 전용 SecurityFilterChain
+    @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http
     ) throws Exception {
@@ -70,7 +102,6 @@ public class SecurityConfig {
 
                         // 인증 없이 접근 가능한 API
                         .requestMatchers(
-
                                 "/api/auth/signup",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
@@ -82,18 +113,18 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
 
-                                // 내 요청글 조회는 인증 필수
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/requests/me"
-                                ).authenticated()
+                        // 내 요청글 조회는 인증 필수
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/requests/me"
+                        ).authenticated()
 
-// 게시글 목록 및 상세 조회는 공개
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/requests",
-                                        "/api/requests/*"
-                                ).permitAll()
+                        // 게시글 목록 및 상세 조회는 공개
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/requests",
+                                "/api/requests/*"
+                        ).permitAll()
 
                         // 나머지는 모두 인증 필요
                         .anyRequest().authenticated()
@@ -121,7 +152,7 @@ public class SecurityConfig {
                         )
                 )
 
-                // JWT 필터 등록
+                // REST API JWT 필터 등록
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
