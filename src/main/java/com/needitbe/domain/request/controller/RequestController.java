@@ -60,9 +60,13 @@ public class RequestController {
                 );
     }
 
-    // 요청 게시글 목록 조회
+    // =====================================================
+// 요청 게시글 목록 조회
+// =====================================================
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<RequestResponse>>> getRequests(Authentication authentication,
+    public ResponseEntity<ApiResponse<Page<RequestResponse>>> getRequests(
+
+            Authentication authentication,
 
             @RequestParam(required = false)
             String region,
@@ -72,6 +76,9 @@ public class RequestController {
 
             @RequestParam(required = false)
             RequestStatus status,
+
+            @RequestParam(defaultValue = "latest")
+            String sort,
 
             @RequestParam(defaultValue = "0")
             @Min(value = 0, message = "페이지 번호는 0 이상이어야 합니다.")
@@ -85,6 +92,7 @@ public class RequestController {
 
         Page<RequestResponse> response;
 
+        // 로그인 사용자
         if (authentication != null
                 && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getName())) {
@@ -96,16 +104,19 @@ public class RequestController {
                     region,
                     category,
                     status,
+                    sort,
                     page,
                     size
             );
 
         } else {
 
+            // 비로그인 사용자
             response = requestService.getRequests(
                     region,
                     category,
                     status,
+                    sort,
                     page,
                     size
             );
