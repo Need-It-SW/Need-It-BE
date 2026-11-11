@@ -62,7 +62,7 @@ public class RequestController {
 
     // 요청 게시글 목록 조회
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<RequestResponse>>> getRequests(
+    public ResponseEntity<ApiResponse<Page<RequestResponse>>> getRequests(Authentication authentication,
 
             @RequestParam(required = false)
             String region,
@@ -83,14 +83,33 @@ public class RequestController {
             int size
     ) {
 
-        Page<RequestResponse> response =
-                requestService.getRequests(
-                        region,
-                        category,
-                        status,
-                        page,
-                        size
-                );
+        Page<RequestResponse> response;
+
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getName())) {
+
+            Long memberId = Long.valueOf(authentication.getName());
+
+            response = requestService.getRequests(
+                    memberId,
+                    region,
+                    category,
+                    status,
+                    page,
+                    size
+            );
+
+        } else {
+
+            response = requestService.getRequests(
+                    region,
+                    category,
+                    status,
+                    page,
+                    size
+            );
+        }
 
         return ResponseEntity.ok(
                 ApiResponse.success(
@@ -103,11 +122,30 @@ public class RequestController {
     // 요청 게시글 상세 조회
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<RequestResponse>> getRequest(
-            @PathVariable("id") Long requestId
+            @PathVariable("id") Long requestId,
+            Authentication authentication
     ) {
 
-        RequestResponse response =
-                requestService.getRequest(requestId);
+        RequestResponse response;
+
+        // 로그인한 사용자
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getName())) {
+
+            Long memberId = Long.valueOf(authentication.getName());
+
+            // 로그인한 회원의 관심 등록 여부 확인
+            response = requestService.getRequest(
+                    memberId,
+                    requestId
+            );
+
+        } else {
+
+            // 비로그인 사용자
+            response = requestService.getRequest(requestId);
+        }
 
         return ResponseEntity.ok(
                 ApiResponse.success(

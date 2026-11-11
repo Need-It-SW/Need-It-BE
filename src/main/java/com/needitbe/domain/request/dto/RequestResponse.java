@@ -19,13 +19,24 @@ public record RequestResponse(
         RequestStatus status,
         List<RequestImageResponse> images,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Boolean isFavorite
 
 ) {
 
+    // 기존 호출을 위한 메서드
     public static RequestResponse from(
             ItemRequest request,
             List<RequestImageResponse> images
+    ) {
+        return from(request, images, false);
+    }
+
+    // 관심 여부를 포함하는 메서드
+    public static RequestResponse from(
+            ItemRequest request,
+            List<RequestImageResponse> images,
+            boolean isFavorite
     ) {
 
         return new RequestResponse(
@@ -39,7 +50,8 @@ public record RequestResponse(
                 request.getStatus(),
                 images,
                 request.getCreatedAt(),
-                request.getUpdatedAt()
+                request.getUpdatedAt(),
+                isFavorite
         );
     }
 }

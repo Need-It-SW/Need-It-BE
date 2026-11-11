@@ -37,18 +37,21 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
 import lombok.extern.slf4j.Slf4j;
 
 import com.needitbe.domain.offer.repository.OfferRepository;
 import com.needitbe.domain.offer.entity.OfferStatus;
-
-import com.needitbe.domain.offer.repository.OfferRepository;
+import com.needitbe.domain.favorite.repository.FavoriteRepository;
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RequestService {
 
+    private final FavoriteRepository favoriteRepository;
     private final OfferRepository offerRepository;
     private final ItemRequestRepository itemRequestRepository;
     private final MemberRepository memberRepository;
@@ -213,6 +216,10 @@ public class RequestService {
                 .toList();
 
         // 6. 게시글 및 연결된 이미지 DB 삭제
+        // 6. 해당 게시글에 등록된 관심 데이터 삭제
+        favoriteRepository.deleteByItemRequestId(requestId);
+
+// 7. 게시글 및 연결된 이미지 DB 삭제
         itemRequestRepository.delete(itemRequest);
 
         // 7. DB 커밋 성공 후 S3 이미지 삭제
@@ -479,5 +486,109 @@ public class RequestService {
                     }
                 }
         );
+    }
+
+    // 로그인 회원의 관심 여부를 포함한 게시글 상세 조회
+    @Transactional(readOnly = true)
+    public RequestResponse getRequest(
+            Long memberId,
+            Long requestId
+    ) {
+
+        // 1. 게시글 조회
+        ItemRequest itemRequest = itemRequestRepository.findById(requestId)
+                .orElseThrow(() ->
+                        new CustomException(ErrorCode.REQUEST_NOT_FOUND)
+                );
+
+        // 2. 관심 등록 여부 확인
+        boolean isFavorite =
+                favoriteRepository.existsByMemberIdAndItemRequestId(
+                        memberId,
+                        requestId
+                );
+
+        // 3. 이미지 응답 변환
+        List<RequestImageResponse> images = itemRequest.getImages()
+                .stream()
+                .map(image -> RequestImageResponse.from(
+                        image,
+                        s3Service.getPresignedUrl(image.getImageKey())
+                ))
+                .toList();
+
+        // 4. 관심 여부를 포함한 응답 반환
+        return RequestResponse.from(
+                itemRequest,
+                images,
+                isFavorite
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RequestResponse> getRequests(
+            Long memberId,
+            String region,
+            RequestCategory category,
+            RequestStatus status,
+            int page,
+            int size
+    ) {
+
+        // 1. 페이지네이션 + 최신순 정렬
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+                        .and(Sort.by(Sort.Direction.DESC, "id"))
+        );
+
+        // 2. 검색 조건
+        Specification<ItemRequest> specification =
+                Specification.allOf(
+                        ItemRequestSpecification.hasRegion(region),
+                        ItemRequestSpecification.hasCategory(category),
+                        ItemRequestSpecification.hasStatus(status)
+                );
+
+        // 3. 게시글 목록 조회
+        Page<ItemRequest> requests =
+                itemRequestRepository.findAll(specification, pageable);
+
+        // 4. 현재 페이지의 게시글 ID 수집
+        List<Long> requestIds = requests.getContent()
+                .stream()
+                .map(ItemRequest::getId)
+                .toList();
+
+        // 5. 관심 등록된 게시글 ID 조회
+        Set<Long> favoriteIds = requestIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(
+                favoriteRepository.findFavoriteRequestIds(
+                        memberId,
+                        requestIds
+                )
+        );
+
+        // 6. DTO 변환
+        return requests.map(request -> {
+
+            boolean isFavorite = favoriteIds.contains(request.getId());
+
+            List<RequestImageResponse> images = request.getImages()
+                    .stream()
+                    .map(image -> RequestImageResponse.from(
+                            image,
+                            s3Service.getPresignedUrl(image.getImageKey())
+                    ))
+                    .toList();
+
+            return RequestResponse.from(
+                    request,
+                    images,
+                    isFavorite
+            );
+        });
     }
 }
