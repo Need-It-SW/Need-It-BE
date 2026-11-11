@@ -11,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
+import com.needitbe.domain.member.dto.UsernameUpdateRequest;
 
 @RestController
 @RequiredArgsConstructor
@@ -87,4 +90,56 @@ public class MemberController {
                 )
         );
     }
+
+    // 프로필 사진 변경
+    @PatchMapping(
+            value = "/me/profile-image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<ApiResponse<MemberResponse>> updateProfileImage(
+            Authentication authentication,
+            @RequestPart("file") MultipartFile file
+    ) {
+        Long memberId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "프로필 사진 변경에 성공했습니다.",
+                        memberService.updateProfileImage(memberId, file)
+                )
+        );
+    }
+
+    // 프로필 사진 삭제
+    @DeleteMapping("/me/profile-image")
+    public ResponseEntity<ApiResponse<MemberResponse>> deleteProfileImage(
+            Authentication authentication
+    ) {
+        Long memberId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "프로필 사진 삭제에 성공했습니다.",
+                        memberService.deleteProfileImage(memberId)
+                )
+        );
+    }
+    // 아이디 변경
+    @PatchMapping("/me/username")
+    public ResponseEntity<ApiResponse<MemberResponse>> updateUsername(
+            Authentication authentication,
+            @Valid @RequestBody UsernameUpdateRequest request
+    ) {
+
+        Long memberId = Long.valueOf(authentication.getName());
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "아이디 변경에 성공했습니다.",
+                        memberService.updateUsername(memberId, request)
+                )
+        );
+    }
+
+
 }

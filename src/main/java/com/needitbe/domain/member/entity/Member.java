@@ -45,8 +45,12 @@ public class Member {
     @Column(nullable = false, length = 20)
     private MemberRole role;
 
+    @Column(name = "profile_image_key", length = 500)
+    private String profileImageKey;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
 
     @PrePersist
     protected void onCreate() {
@@ -64,6 +68,19 @@ public class Member {
         this.nickname = nickname;
         this.region = region;
         this.role = MemberRole.USER;
+    }
+    // 아이디 변경
+    public void updateUsername(String username) {
+        this.username = username;
+    }
+    // 프로필 사진 변경
+    public void updateProfileImage(String profileImageKey) {
+        this.profileImageKey = profileImageKey;
+    }
+
+    // 프로필 사진 삭제
+    public void deleteProfileImage() {
+        this.profileImageKey = null;
     }
 
     // 닉네임 변경

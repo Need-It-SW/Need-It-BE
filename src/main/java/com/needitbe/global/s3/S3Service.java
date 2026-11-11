@@ -227,5 +227,46 @@ public class S3Service {
         }
     }
 
+    // 회원 프로필 이미지 업로드
+    public String uploadProfileImage(
+            MultipartFile file,
+            Long memberId
+    ) {
+        validateImage(file);
+
+        String extension = switch (file.getContentType()) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/webp" -> ".webp";
+            default -> throw new IllegalArgumentException(
+                    "지원하지 않는 이미지 형식입니다."
+            );
+        };
+
+        String imageKey = "profiles/"
+                + memberId
+                + "/"
+                + UUID.randomUUID()
+                + extension;
+
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(imageKey)
+                            .contentType(file.getContentType())
+                            .build(),
+                    RequestBody.fromBytes(file.getBytes())
+            );
+
+            return imageKey;
+
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "프로필 이미지 업로드에 실패했습니다.", e
+            );
+        }
+    }
+
 
 }
