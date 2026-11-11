@@ -87,6 +87,7 @@ public class RequestService {
             String region,
             RequestCategory category,
             RequestStatus status,
+            String keyword,
             String sort,
             int page,
             int size
@@ -107,7 +108,8 @@ public class RequestService {
                 Specification.allOf(
                         ItemRequestSpecification.hasRegion(region),
                         ItemRequestSpecification.hasCategory(category),
-                        ItemRequestSpecification.hasStatus(status)
+                        ItemRequestSpecification.hasStatus(status),
+                        ItemRequestSpecification.hasKeyword(keyword)
                 );
 
         // 게시글 목록 조회
@@ -127,6 +129,7 @@ public class RequestService {
             String region,
             RequestCategory category,
             RequestStatus status,
+            String keyword,
             String sort,
             int page,
             int size
@@ -147,7 +150,8 @@ public class RequestService {
                 Specification.allOf(
                         ItemRequestSpecification.hasRegion(region),
                         ItemRequestSpecification.hasCategory(category),
-                        ItemRequestSpecification.hasStatus(status)
+                        ItemRequestSpecification.hasStatus(status),
+                        ItemRequestSpecification.hasKeyword(keyword)
                 );
 
         // 게시글 목록 조회

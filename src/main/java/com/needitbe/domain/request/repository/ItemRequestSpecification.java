@@ -49,4 +49,49 @@ public class ItemRequestSpecification {
             return cb.equal(root.get("status"), status);
         };
     }
+
+    // =====================================================
+    // 키워드 검색 (제목 또는 내용)
+    // =====================================================
+    public static Specification<ItemRequest> hasKeyword(String keyword) {
+
+        return (root, query, cb) -> {
+
+            // 검색어가 없으면 전체 조회
+            if (keyword == null || keyword.isBlank()) {
+                return cb.conjunction();
+            }
+
+            // 검색어 앞뒤 공백 제거
+            String searchKeyword = keyword.trim();
+
+            // LIKE 특수문자 이스케이프
+            String escapedKeyword = searchKeyword
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_");
+
+            String pattern = "%" + escapedKeyword.toLowerCase() + "%";
+
+            // 제목 검색
+            var titlePredicate = cb.like(
+                    cb.lower(root.get("title")),
+                    pattern,
+                    '\\'
+            );
+
+            // 내용 검색
+            var descriptionPredicate = cb.like(
+                    cb.lower(root.get("description")),
+                    pattern,
+                    '\\'
+            );
+
+            // 제목 또는 내용에 검색어가 포함되면 조회
+            return cb.or(
+                    titlePredicate,
+                    descriptionPredicate
+            );
+        };
+    }
 }

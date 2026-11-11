@@ -77,6 +77,9 @@ public class RequestController {
             @RequestParam(required = false)
             RequestStatus status,
 
+            @RequestParam(required = false)
+            String keyword,
+
             @RequestParam(defaultValue = "latest")
             String sort,
 
@@ -104,6 +107,7 @@ public class RequestController {
                     region,
                     category,
                     status,
+                    keyword,
                     sort,
                     page,
                     size
@@ -116,6 +120,7 @@ public class RequestController {
                     region,
                     category,
                     status,
+                    keyword,
                     sort,
                     page,
                     size
