@@ -3,6 +3,8 @@ package com.needitbe.domain.offer.service;
 import com.needitbe.domain.member.entity.Member;
 import com.needitbe.domain.member.repository.MemberRepository;
 
+import com.needitbe.domain.notification.entity.NotificationType;
+import com.needitbe.domain.notification.service.NotificationService;
 import com.needitbe.domain.offer.dto.OfferCreateRequest;
 import com.needitbe.domain.offer.dto.OfferImageResponse;
 import com.needitbe.domain.offer.dto.OfferResponse;
@@ -49,10 +51,14 @@ public class OfferService {
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
     private final ChatRoomRepository chatRoomRepository;
+    private final NotificationService notificationService;
 
     // =====================================================
     // 1. 물품 제공 제안 등록
     // =====================================================
+    // =====================================================
+// 1. 물품 제공 제안 등록 + 알림 생성
+// =====================================================
     @Transactional
     public OfferResponse createOffer(
             Long memberId,
@@ -91,10 +97,23 @@ public class OfferService {
                 request.message()
         );
 
-        // 6. DB 저장
+        // 6. 제안 DB 저장
         Offer savedOffer = offerRepository.saveAndFlush(offer);
 
-        // 7. 응답 반환
+        // ==========================================
+        // 7. 요청글 작성자에게 알림 생성
+        // ==========================================
+
+        Long receiverId = itemRequest.getMember().getId();
+
+        notificationService.createNotification(
+                receiverId,
+                NotificationType.OFFER_RECEIVED,
+                "새로운 나눔 제안이 도착했어요.",
+                savedOffer.getId()
+        );
+
+        // 8. 응답 반환
         return OfferResponse.from(savedOffer);
     }
 
@@ -332,6 +351,20 @@ public class OfferService {
         }
 
         // 11. 응답 반환
+        // ==========================================
+// 11. 제안 작성자에게 수락 알림 생성
+// ==========================================
+
+        Long receiverId = offer.getMember().getId();
+
+        notificationService.createNotification(
+                receiverId,
+                NotificationType.OFFER_ACCEPTED,
+                "보낸 나눔 제안이 수락되었어요.",
+                offer.getId()
+        );
+
+// 12. 응답 반환
         return OfferResponse.from(offer);
     }
 
@@ -533,4 +566,6 @@ public class OfferService {
 
         return OfferResponse.from(offer);
     }
+
+
 }

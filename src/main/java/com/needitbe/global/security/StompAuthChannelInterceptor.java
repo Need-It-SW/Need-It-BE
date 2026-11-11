@@ -47,7 +47,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         StompCommand command = accessor.getCommand();
 
-        // 1. WebSocket 연결 인증
+        // =====================================================
+        // 1. WebSocket 연결 인증 (JWT)
+        // =====================================================
         if (StompCommand.CONNECT.equals(command)) {
 
             String authorization =
@@ -55,6 +57,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
             if (authorization == null
                     || !authorization.startsWith("Bearer ")) {
+
                 throw new IllegalArgumentException(
                         "WebSocket 인증 토큰이 필요합니다."
                 );
@@ -65,12 +68,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             Claims claims = jwtTokenProvider.parseClaims(token);
 
             if (!"access".equals(claims.get("type", String.class))) {
+
                 throw new IllegalArgumentException(
                         "Access Token만 사용할 수 있습니다."
                 );
             }
 
             Long memberId = Long.valueOf(claims.getSubject());
+            System.out.println("🔐 WebSocket 연결 사용자 ID: " + memberId);
 
             Member member = memberRepository.findById(memberId)
                     .orElseThrow(() ->
@@ -93,7 +98,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             accessor.setUser(authentication);
         }
 
-        // 2. 채팅방 구독 및 메시지 전송 권한 검증
+        // =====================================================
+        // 2. WebSocket 구독 및 메시지 전송 권한 검증
+        // =====================================================
         if (StompCommand.SUBSCRIBE.equals(command)
                 || StompCommand.SEND.equals(command)) {
 
@@ -113,8 +120,20 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 );
             }
 
+            // =====================================================
+            // 3. 사용자별 실시간 알림 구독
+            // =====================================================
+            if (StompCommand.SUBSCRIBE.equals(command)
+                    && destination.equals("/user/queue/notifications")) {
+
+                return message;
+            }
+
             Long chatRoomId;
 
+            // =====================================================
+            // 4. 채팅방 구독 권한 검증
+            // =====================================================
             if (StompCommand.SUBSCRIBE.equals(command)) {
 
                 // 허용 경로:
@@ -124,13 +143,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 if (!destination.matches(
                         "^/topic/chats/\\d+(/read)?$"
                 )) {
+
                     throw new IllegalArgumentException(
                             "허용되지 않은 구독 경로입니다."
                     );
                 }
-
-                // /topic/chats/1/read -> 1
-                // /topic/chats/1      -> 1
 
                 String[] parts = destination.split("/");
 
@@ -138,10 +155,17 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
             } else {
 
+                // =====================================================
+                // 5. 채팅 메시지 전송 권한 검증
+                // =====================================================
+
+                // 허용 경로:
                 // /app/chats/{chatRoomId}/send
+
                 if (!destination.matches(
                         "^/app/chats/\\d+/send$"
                 )) {
+
                     throw new IllegalArgumentException(
                             "허용되지 않은 메시지 전송 경로입니다."
                     );
@@ -155,9 +179,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 chatRoomId = Long.valueOf(id);
             }
 
+            // =====================================================
+            // 6. 채팅방 참여자 검증
+            // =====================================================
             Long memberId = Long.valueOf(principal.getName());
 
-            // 채팅방 참여자 검증
             chatService.validateChatParticipant(
                     memberId,
                     chatRoomId

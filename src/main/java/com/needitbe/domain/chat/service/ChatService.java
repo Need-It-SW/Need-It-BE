@@ -30,13 +30,15 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.needitbe.domain.notification.service.NotificationService;
+import com.needitbe.domain.notification.entity.NotificationType;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ChatService {
-
+    private final NotificationService notificationService;
     private final S3Service s3Service;
     private final ApplicationEventPublisher eventPublisher;
     private final MemberRepository memberRepository;
@@ -180,6 +182,25 @@ public class ChatService {
         ChatMessage savedMessage =
                 chatMessageRepository.saveAndFlush(message);
 
+// ==========================================
+// 채팅 상대방에게 알림 생성
+// ==========================================
+
+// 1. 알림 수신자 조회
+        Long receiverId = getReceiverId(
+                chatRoom,
+                memberId
+        );
+
+// 2. 알림 DB 저장
+        notificationService.createNotification(
+                receiverId,
+                NotificationType.CHAT_MESSAGE,
+                "새로운 채팅 메시지가 도착했어요.",
+                chatRoomId
+        );
+
+// 3. 기존 메시지 응답 반환
         return ChatMessageResponse.from(savedMessage);
     }
 
@@ -276,6 +297,26 @@ public class ChatService {
                     toMessageResponse(savedMessage);
 
             // 9. DB 커밋 이후 WebSocket 전송
+            // ==========================================
+// 9. 채팅 상대방에게 알림 생성
+// ==========================================
+
+            Long receiverId = getReceiverId(
+                    chatRoom,
+                    memberId
+            );
+
+            notificationService.createNotification(
+                    receiverId,
+                    NotificationType.CHAT_MESSAGE,
+                    "새로운 채팅 이미지가 도착했어요.",
+                    chatRoomId
+            );
+
+// ==========================================
+// 10. 기존 WebSocket 이벤트 발행
+// ==========================================
+
             eventPublisher.publishEvent(
                     new ChatImageSentEvent(
                             chatRoomId,
@@ -316,5 +357,30 @@ public class ChatService {
         }
 
         return ChatMessageResponse.from(message);
+    }
+
+    // 채팅 상대방 ID 조회
+    private Long getReceiverId(
+            ChatRoom chatRoom,
+            Long senderId
+    ) {
+
+        Offer offer = chatRoom.getOffer();
+
+        Long requestMemberId =
+                offer.getItemRequest().getMember().getId();
+
+        Long offerMemberId =
+                offer.getMember().getId();
+
+        if (senderId.equals(requestMemberId)) {
+            return offerMemberId;
+        }
+
+        if (senderId.equals(offerMemberId)) {
+            return requestMemberId;
+        }
+
+        throw new CustomException(ErrorCode.CHAT_ACCESS_DENIED);
     }
 }
