@@ -4,15 +4,21 @@ import com.needitbe.domain.chat.dto.ChatMessageRequest;
 import com.needitbe.domain.chat.dto.ChatMessageResponse;
 import com.needitbe.domain.chat.service.ChatService;
 
+import com.needitbe.global.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
+
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.util.Map;
 
 @Controller
 @RequiredArgsConstructor
@@ -21,6 +27,7 @@ public class ChatWebSocketController {
     private final ChatService chatService;
     private final SimpMessagingTemplate messagingTemplate;
 
+    // 채팅 메시지 전송
     @MessageMapping("/chats/{chatRoomId}/send")
     public void sendMessage(
             @DestinationVariable Long chatRoomId,
@@ -48,6 +55,24 @@ public class ChatWebSocketController {
         messagingTemplate.convertAndSend(
                 "/topic/chats/" + chatRoomId,
                 response
+        );
+    }
+
+    // WebSocket 메시지 처리 중 발생한 오류를 발신자에게 전달
+    @MessageExceptionHandler({
+            IllegalArgumentException.class,
+            CustomException.class
+    })
+    @SendToUser(value = "/queue/errors", broadcast = false)
+    public Map<String, String> handleChatException(Exception e) {
+
+        String message = e instanceof CustomException customException
+                ? customException.getErrorCode().getMessage()
+                : e.getMessage();
+
+        return Map.of(
+                "type", "CHAT_ERROR",
+                "message", message
         );
     }
 }

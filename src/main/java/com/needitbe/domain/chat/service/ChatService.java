@@ -33,11 +33,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.needitbe.domain.notification.service.NotificationService;
 import com.needitbe.domain.notification.entity.NotificationType;
 
+import com.needitbe.domain.block.repository.BlockRepository;
+
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ChatService {
+    private final BlockRepository blockRepository;
     private final NotificationService notificationService;
     private final S3Service s3Service;
     private final ApplicationEventPublisher eventPublisher;
@@ -148,6 +151,8 @@ public class ChatService {
 
         validateChatParticipant(memberId, chatRoomId);
 
+        validateNotBlocked(chatRoom, memberId);
+
         Offer offer = chatRoom.getOffer();
 
         // 거래 완료 이후에도 채팅 가능
@@ -256,6 +261,8 @@ public class ChatService {
 
         // 2. 채팅방 참여자 확인
         validateChatParticipant(memberId, chatRoomId);
+
+        validateNotBlocked(chatRoom, memberId);
 
         // 3. 거래 상태 확인
         OfferStatus status = chatRoom.getOffer().getStatus();
@@ -382,5 +389,14 @@ public class ChatService {
         }
 
         throw new CustomException(ErrorCode.CHAT_ACCESS_DENIED);
+    }
+
+    // 채팅 상대방과 차단 관계 확인
+    private void validateNotBlocked(ChatRoom chatRoom, Long senderId) {
+        Long receiverId = getReceiverId(chatRoom, senderId);
+
+        if (blockRepository.existsBlockBetweenMembers(senderId, receiverId)) {
+            throw new CustomException(ErrorCode.MEMBER_BLOCKED);
+        }
     }
 }

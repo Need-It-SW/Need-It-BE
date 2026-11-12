@@ -40,10 +40,12 @@ import com.needitbe.domain.offer.repository.OfferAcceptanceCancellationRepositor
 import com.needitbe.domain.chat.entity.ChatRoom;
 import com.needitbe.domain.chat.repository.ChatRoomRepository;
 
+import com.needitbe.domain.block.repository.BlockRepository;
+
 @Service
 @RequiredArgsConstructor
 public class OfferService {
-
+    private final BlockRepository blockRepository;
     private final OfferAcceptanceCancellationRepository cancellationRepository;
     private final OfferRepository offerRepository;
     private final OfferImageRepository offerImageRepository;
@@ -73,12 +75,33 @@ public class OfferService {
                                 new CustomException(ErrorCode.REQUEST_NOT_FOUND)
                         );
 
+
         // 2. 자기 게시글인지 확인
         if (itemRequest.getMember().getId().equals(memberId)) {
             throw new CustomException(ErrorCode.OFFER_SELF_NOT_ALLOWED);
         }
 
-        // 3. 마감된 게시글인지 확인
+// ==========================================
+// 3. ⭐ 회원 차단 관계 확인
+// ==========================================
+
+// 요청 게시글 작성자 ID
+        Long requestOwnerId = itemRequest.getMember().getId();
+
+// 양방향 차단 관계 확인
+        boolean isBlocked = blockRepository.existsBlockBetweenMembers(
+                memberId,
+                requestOwnerId
+        );
+
+        if (blockRepository.existsBlockBetweenMembers(
+                memberId,
+                requestOwnerId
+        )) {
+            throw new CustomException(ErrorCode.OFFER_BLOCKED);
+        }
+
+// 4. 마감된 게시글인지 확인
         if (itemRequest.getStatus() == RequestStatus.CLOSED) {
             throw new CustomException(ErrorCode.OFFER_REQUEST_CLOSED);
         }
@@ -311,6 +334,18 @@ public class OfferService {
         // 2. 요청 게시글 작성자 확인
         if (!offer.getItemRequest().getMember().getId().equals(memberId)) {
             throw new CustomException(ErrorCode.OFFER_ACCESS_DENIED);
+        }
+        // ==========================================
+// ⭐ 차단 관계 확인
+// ==========================================
+
+        Long offerMemberId = offer.getMember().getId();
+
+        if (blockRepository.existsBlockBetweenMembers(
+                memberId,
+                offerMemberId
+        )) {
+            throw new CustomException(ErrorCode.OFFER_BLOCKED_ACCEPT);
         }
 
         // 3. 마감된 게시글인지 확인

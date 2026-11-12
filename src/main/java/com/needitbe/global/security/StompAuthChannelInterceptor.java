@@ -121,10 +121,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             }
 
             // =====================================================
-            // 3. 사용자별 실시간 알림 구독
-            // =====================================================
+// 3. 사용자별 알림 및 오류 메시지 구독
+// =====================================================
             if (StompCommand.SUBSCRIBE.equals(command)
-                    && destination.equals("/user/queue/notifications")) {
+                    && (
+                    destination.equals("/user/queue/notifications")
+                            || destination.equals("/user/queue/errors")
+            )) {
 
                 return message;
             }

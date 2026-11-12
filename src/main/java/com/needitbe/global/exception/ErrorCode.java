@@ -27,6 +27,10 @@ public enum ErrorCode {
     INVALID_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "MEMBER_400_3", "현재 비밀번호가 일치하지 않습니다."),
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "MEMBER_400_4", "기존 비밀번호와 동일한 비밀번호로 변경할 수 없습니다."),
     NEW_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "MEMBER_400_5", "새 비밀번호와 비밀번호 확인이 일치하지 않습니다."),
+    // 회원 차단 오류
+    MEMBER_BLOCKED(HttpStatus.FORBIDDEN, "MEMBER_403_1", "차단 관계에 있는 회원과는 메시지를 주고받을 수 없습니다."),
+    OFFER_BLOCKED(HttpStatus.FORBIDDEN, "OFFER_403_1", "차단 관계에 있는 회원에게는 나눔 제안을 보낼 수 없습니다."),
+    OFFER_BLOCKED_ACCEPT(HttpStatus.FORBIDDEN, "OFFER_403_2", "차단 관계에 있는 회원의 제안은 수락할 수 없습니다."),
 
 
     // 인증 오류
