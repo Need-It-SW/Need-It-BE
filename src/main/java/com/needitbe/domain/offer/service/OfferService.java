@@ -94,10 +94,7 @@ public class OfferService {
                 requestOwnerId
         );
 
-        if (blockRepository.existsBlockBetweenMembers(
-                memberId,
-                requestOwnerId
-        )) {
+        if (isBlocked) {
             throw new CustomException(ErrorCode.OFFER_BLOCKED);
         }
 
