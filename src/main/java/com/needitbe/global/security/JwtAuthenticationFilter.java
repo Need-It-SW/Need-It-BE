@@ -1,6 +1,7 @@
 package com.needitbe.global.security;
 
 import com.needitbe.domain.member.entity.Member;
+import com.needitbe.domain.member.entity.MemberStatus;
 import com.needitbe.domain.member.repository.MemberRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -52,10 +53,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             Long memberId = Long.valueOf(claims.getSubject());
+
             Member member = memberRepository.findById(memberId)
                     .orElse(null);
 
             if (member != null) {
+
+                // ⭐ 이용 정지 회원 접근 차단
+                if (member.getStatus() == MemberStatus.SUSPENDED) {
+
+                    SecurityContextHolder.clearContext();
+
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json;charset=UTF-8");
+
+                    response.getWriter().write("""
+                            {
+                              "success": false,
+                              "message": "이용 정지된 계정입니다.",
+                              "data": null
+                            }
+                            """);
+
+                    return;
+                }
 
                 List<SimpleGrantedAuthority> authorities = List.of(
                         new SimpleGrantedAuthority(
@@ -75,6 +96,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
         } catch (JwtException | IllegalArgumentException e) {
+
             // 잘못되거나 만료된 토큰은 인증하지 않음
             SecurityContextHolder.clearContext();
         }

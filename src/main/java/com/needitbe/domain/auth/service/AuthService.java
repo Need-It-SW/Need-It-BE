@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.needitbe.domain.member.entity.MemberStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +67,11 @@ public class AuthService {
             throw new CustomException(ErrorCode.INVALID_CREDENTIALS);
         }
 
+        // 이용 정지 회원 로그인 차단
+        if (member.getStatus() == MemberStatus.SUSPENDED) {
+            throw new CustomException(ErrorCode.MEMBER_SUSPENDED);
+        }
+
         String accessToken =
                 jwtTokenProvider.createAccessToken(member);
 
@@ -96,6 +102,11 @@ public class AuthService {
                 .orElseThrow(() ->
                         new CustomException(ErrorCode.MEMBER_NOT_FOUND)
                 );
+
+        // 이용 정지 회원 토큰 재발급 차단
+        if (member.getStatus() == MemberStatus.SUSPENDED) {
+            throw new CustomException(ErrorCode.MEMBER_SUSPENDED);
+        }
 
         String newAccessToken =
                 jwtTokenProvider.createAccessToken(member);

@@ -31,6 +31,7 @@ public enum ErrorCode {
     MEMBER_BLOCKED(HttpStatus.FORBIDDEN, "MEMBER_403_1", "차단 관계에 있는 회원과는 메시지를 주고받을 수 없습니다."),
     OFFER_BLOCKED(HttpStatus.FORBIDDEN, "OFFER_403_1", "차단 관계에 있는 회원에게는 나눔 제안을 보낼 수 없습니다."),
     OFFER_BLOCKED_ACCEPT(HttpStatus.FORBIDDEN, "OFFER_403_2", "차단 관계에 있는 회원의 제안은 수락할 수 없습니다."),
+    MEMBER_SUSPENDED(HttpStatus.FORBIDDEN,   "MEMBER_403_1","이용 정지된 계정입니다."),
 
 
     // 인증 오류
@@ -59,8 +60,13 @@ public enum ErrorCode {
     //채팅 오류
     CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND,"CHAT_001","채팅방을 찾을 수 없습니다."),
     CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CHAT_002","채팅방에 접근할 권한이 없습니다."),
-    CHAT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "CHAT_003","현재 메시지를 전송할 수 없는 채팅방입니다.");
+    CHAT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "CHAT_003","현재 메시지를 전송할 수 없는 채팅방입니다."),
 
+    BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "BANNER_404_1", "존재하지 않는 광고 배너입니다."),
+
+    CAMPAIGN_NOT_FOUND(HttpStatus.NOT_FOUND, "CAMPAIGN_404_1", "존재하지 않는 광고 캠페인입니다."),
+    CAMPAIGN_BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "CAMPAIGN_BANNER_404_1", "캠페인에 연결된 배너를 찾을 수 없습니다."),
+    BANNER_IN_USE(HttpStatus.CONFLICT, "BANNER_409_1", "진행 중이거나 예정된 캠페인에서 사용 중인 배너는 삭제할 수 없습니다.");
 
     private final HttpStatus status;
     private final String code;

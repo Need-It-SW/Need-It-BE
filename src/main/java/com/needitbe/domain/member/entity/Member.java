@@ -51,6 +51,10 @@ public class Member {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private MemberStatus status = MemberStatus.ACTIVE;
+
 
     @PrePersist
     protected void onCreate() {
@@ -68,6 +72,7 @@ public class Member {
         this.nickname = nickname;
         this.region = region;
         this.role = MemberRole.USER;
+        this.status = MemberStatus.ACTIVE;
     }
     // 아이디 변경
     public void updateUsername(String username) {
@@ -95,5 +100,15 @@ public class Member {
     // 비밀번호 변경
     public void updatePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    // 회원 이용 정지
+    public void suspend() {
+        this.status = MemberStatus.SUSPENDED;
+    }
+
+    // 회원 이용 정지 해제
+    public void activate() {
+        this.status = MemberStatus.ACTIVE;
     }
 }
