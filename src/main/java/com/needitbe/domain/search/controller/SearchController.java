@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import org.springframework.security.core.Authentication;
+
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/searches")
@@ -23,10 +26,24 @@ public class SearchController {
     // =====================================================
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> saveSearch(
-            @RequestBody SearchRequest request
+            @RequestBody SearchRequest request,
+            Authentication authentication
     ) {
 
-        searchService.saveSearch(request.keyword());
+        Long memberId = null;
+
+        // 로그인한 사용자라면 회원 ID 추출
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getName())) {
+
+            memberId = Long.valueOf(authentication.getName());
+        }
+
+        searchService.saveSearch(
+                request.keyword(),
+                memberId
+        );
 
         return ResponseEntity.ok(
                 ApiResponse.success(

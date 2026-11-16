@@ -12,24 +12,31 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.needitbe.domain.useraction.kafka.UserActionProducer;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class SearchService {
 
     private final SearchLogRepository searchLogRepository;
+    private final UserActionProducer userActionProducer;
 
     // =====================================================
     // 1. 검색 기록 저장
     // =====================================================
     @Transactional
-    public void saveSearch(String keyword) {
+    public void saveSearch(String keyword, Long memberId) {
 
-        // 1. 검색어가 없으면 저장하지 않음
+        // 1. 검색어 검증
         if (keyword == null || keyword.isBlank()) {
             return;
         }
 
-        // 2. 앞뒤 공백 제거 + 연속 공백 정리 + 소문자 변환
+        // 2. 검색어 정규화
         String normalizedKeyword = keyword
                 .trim()
                 .replaceAll("\\s+", " ")
@@ -42,11 +49,45 @@ public class SearchService {
             );
         }
 
-        // 4. 검색 기록 생성
+        // 4. 기존 MySQL 검색 기록 저장
         SearchLog searchLog = new SearchLog(normalizedKeyword);
-
-        // 5. MySQL 저장
         searchLogRepository.save(searchLog);
+
+        // 5. Kafka 이벤트 생성
+        String userId = memberId == null
+                ? "anonymous"
+                : memberId.toString();
+        String eventId = UUID.randomUUID().toString();
+
+
+        String message = """
+        {
+          "eventId": "%s",
+          "userId": %s,
+          "action": "SEARCH",
+          "keyword": %s
+        }
+        """.formatted(
+                eventId,
+                memberId == null ? "null" : memberId.toString(),
+                "\"" + normalizedKeyword
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"") + "\""
+        );
+
+        // 6. DB 커밋 후 Kafka 메시지 전송
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+                        userActionProducer.send(
+                                userId,
+                                message
+                        );
+                    }
+                }
+        );
     }
 
     // =====================================================

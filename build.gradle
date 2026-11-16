@@ -19,6 +19,8 @@ repositories {
 }
 
 dependencies {
+
+    implementation 'org.springframework.boot:spring-boot-starter-json'
     // Spring Web (REST API)
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
@@ -59,6 +61,8 @@ dependencies {
 
     //WebSocket
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    implementation 'org.springframework.boot:spring-boot-starter-kafka'
 }
 
 tasks.named('test') {

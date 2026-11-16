@@ -17,6 +17,26 @@ spring:
         format_sql: true
     open-in-view: false
 
+  kafka:
+
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+    producer:
+
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+    consumer:
+
+      group-id: needit-user-actions-group
+
+      auto-offset-reset: earliest
+
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
 server:
   port: 8080
 
@@ -29,3 +49,4 @@ aws:
   s3:
     bucket: ${AWS_S3_BUCKET}
     region: ap-northeast-2
+
