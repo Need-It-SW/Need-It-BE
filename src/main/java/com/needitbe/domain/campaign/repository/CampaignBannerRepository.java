@@ -18,8 +18,18 @@ public interface CampaignBannerRepository
             String placement
     );
 
+    boolean existsByCampaign_IdAndBanner_Id(
+
+            Long campaignId,
+
+            Long bannerId
+
+    );
+
     // 특정 배너가 연결된 모든 캠페인 조회
     List<CampaignBanner> findByBanner_Id(Long bannerId);
     List<CampaignBanner> findByPlacement(String placement);
+
+
 
 }

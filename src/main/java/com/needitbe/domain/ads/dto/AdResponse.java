@@ -8,12 +8,14 @@ public record AdResponse(
         String bannerName,
         String imageUrl,
         String targetUrl,
-        String placement
+        String placement,
+        String impressionId
 ) {
 
     public static AdResponse from(
             CampaignBanner campaignBanner,
-            String imageUrl
+            String imageUrl,
+            String impressionId
     ) {
 
         return new AdResponse(
@@ -22,7 +24,8 @@ public record AdResponse(
                 campaignBanner.getBanner().getName(),
                 imageUrl,
                 campaignBanner.getBanner().getTargetUrl(),
-                campaignBanner.getPlacement()
+                campaignBanner.getPlacement(),
+                impressionId
         );
     }
 }

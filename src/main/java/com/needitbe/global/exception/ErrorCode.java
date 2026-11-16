@@ -66,7 +66,14 @@ public enum ErrorCode {
 
     CAMPAIGN_NOT_FOUND(HttpStatus.NOT_FOUND, "CAMPAIGN_404_1", "존재하지 않는 광고 캠페인입니다."),
     CAMPAIGN_BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "CAMPAIGN_BANNER_404_1", "캠페인에 연결된 배너를 찾을 수 없습니다."),
-    BANNER_IN_USE(HttpStatus.CONFLICT, "BANNER_409_1", "진행 중이거나 예정된 캠페인에서 사용 중인 배너는 삭제할 수 없습니다.");
+    BANNER_IN_USE(HttpStatus.CONFLICT, "BANNER_409_1", "진행 중이거나 예정된 캠페인에서 사용 중인 배너는 삭제할 수 없습니다."),
+
+
+    AD_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "AD_400_1", "현재 노출 가능한 광고가 아닙니다."),
+    AD_EVENT_MISMATCH(HttpStatus.BAD_REQUEST, "AD_400_3", "광고 이벤트의 캠페인 또는 배너 정보가 일치하지 않습니다."),
+    AD_IMPRESSION_NOT_FOUND(HttpStatus.BAD_REQUEST, "AD_400_2", "해당 광고의 노출 기록이 존재하지 않습니다."),
+    AD_IMPRESSION_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "AD_400_4", "광고 캠페인의 최대 노출 횟수를 초과했습니다.");
+
 
     private final HttpStatus status;
     private final String code;
