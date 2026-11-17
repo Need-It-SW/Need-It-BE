@@ -11,6 +11,8 @@ import com.needitbe.domain.banner.repository.AdBannerRepository;
 import com.needitbe.global.exception.CustomException;
 import com.needitbe.global.exception.ErrorCode;
 
+
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdEventService {
 
+    private final AdImpressionLimitService adImpressionLimitService;
     private final AdEventRepository adEventRepository;
     private final AdCampaignRepository adCampaignRepository;
     private final AdBannerRepository adBannerRepository;
@@ -26,7 +29,10 @@ public class AdEventService {
 
     // 광고 노출 기록
     @Transactional
-    public void recordImpression(AdEventRequest request) {
+    public void recordImpression(
+            Long memberId,
+            AdEventRequest request
+    ) {
 
         // 1. 캠페인 잠금 획득
         var campaign = adCampaignRepository
@@ -48,6 +54,15 @@ public class AdEventService {
 
             validateSameAd(existing, request);
 
+            if (!java.util.Objects.equals(
+                    existing.getMemberId(),
+                    memberId
+            )) {
+                throw new CustomException(
+                        ErrorCode.AD_EVENT_MISMATCH
+                );
+            }
+
             return;
         }
 
@@ -55,27 +70,22 @@ public class AdEventService {
         validateAd(request);
 
         // 5. 최대 노출 횟수 확인
-        Integer maxImpressions = campaign.getMaxImpressions();
-
-        if (maxImpressions != null) {
-
-            long currentImpressions =
-                    adEventRepository.countByCampaignIdAndEventType(
-                            request.campaignId(),
-                            AdEventType.IMPRESSION
-                    );
-
-            if (currentImpressions >= maxImpressions) {
-                throw new CustomException(
-                        ErrorCode.AD_IMPRESSION_LIMIT_EXCEEDED
-                );
-            }
+        // 5. 노출 한도 확인
+        if (!adImpressionLimitService.canImpress(
+                campaign,
+                memberId
+        )) {
+            throw new CustomException(
+                    ErrorCode.AD_IMPRESSION_LIMIT_EXCEEDED
+            );
         }
+
 
         // 6. 노출 이벤트 생성
         AdEvent event = new AdEvent(
                 request.campaignId(),
                 request.bannerId(),
+                memberId,
                 AdEventType.IMPRESSION,
                 request.impressionId()
         );
@@ -126,6 +136,7 @@ public class AdEventService {
         AdEvent event = new AdEvent(
                 request.campaignId(),
                 request.bannerId(),
+                impression.getMemberId(),
                 AdEventType.CLICK,
                 request.impressionId()
         );

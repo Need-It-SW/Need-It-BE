@@ -119,15 +119,31 @@ public class SecurityConfig {
                                 "/api/requests/me"
                         ).authenticated()
 
-                        // 게시글 목록 및 상세 조회는 공개
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/requests",
-                                "/api/requests/*"
-                        ).permitAll()
+                                // 게시글 목록 및 상세 조회는 공개
 
-                        // 나머지는 모두 인증 필요
-                        .anyRequest().authenticated()
+                                .requestMatchers(
+
+                                        HttpMethod.GET,
+
+                                        "/api/requests",
+
+                                        "/api/requests/*"
+
+                                ).permitAll()
+
+// 광고 조회는 비로그인 사용자도 허용
+
+                                .requestMatchers(
+
+                                        HttpMethod.GET,
+
+                                        "/api/ads"
+
+                                ).permitAll()
+
+// 나머지는 모두 인증 필요
+
+                                .anyRequest().authenticated()
                 )
 
                 // 인증 및 권한 예외 처리

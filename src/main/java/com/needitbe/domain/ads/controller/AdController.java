@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,15 +24,28 @@ public class AdController {
     private final AdEventService adEventService;
 
     // 사용자 광고 조회
-    @Operation(summary = "사용자 광고 조회")
+    @Operation(summary = "사용자 광고 조회 (로그인 시 개인화 광고 제공)")
     @GetMapping
     public ApiResponse<List<AdResponse>> getAds(
-            @RequestParam String placement
+            @RequestParam String placement,
+            Authentication authentication
     ) {
 
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+
+            return ApiResponse.success(
+                    "일반 광고 조회에 성공했습니다.",
+                    adService.getAds(placement)
+            );
+        }
+
+        Long memberId = Long.valueOf(authentication.getName());
+
         return ApiResponse.success(
-                "광고 조회에 성공했습니다.",
-                adService.getAds(placement)
+                "개인화 광고 조회에 성공했습니다.",
+                adService.getPersonalizedAds(memberId, placement)
         );
     }
 
@@ -39,10 +53,13 @@ public class AdController {
     @Operation(summary = "광고 노출 기록")
     @PostMapping("/impressions")
     public ApiResponse<Void> recordImpression(
-            @Valid @RequestBody AdEventRequest request
+            @Valid @RequestBody AdEventRequest request,
+            Authentication authentication
     ) {
 
-        adEventService.recordImpression(request);
+        Long memberId = getMemberId(authentication);
+
+        adEventService.recordImpression(memberId, request);
 
         return ApiResponse.success(
                 "광고 노출 기록에 성공했습니다.",
@@ -63,5 +80,18 @@ public class AdController {
                 "광고 클릭 기록에 성공했습니다.",
                 null
         );
+    }
+
+    // JWT에서 회원 ID 추출
+    private Long getMemberId(Authentication authentication) {
+
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+
+            return null;
+        }
+
+        return Long.valueOf(authentication.getName());
     }
 }

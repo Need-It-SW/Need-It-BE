@@ -44,6 +44,9 @@ public class AdEvent {
 
     @Column(name = "impression_id", length = 36)
     private String impressionId;
+    // 광고를 조회한 회원 ID
+    @Column(name = "member_id")
+    private Long memberId;
 
     // 이벤트 발생 시간
     @Column(
@@ -53,20 +56,22 @@ public class AdEvent {
     )
 
 
+
     private LocalDateTime createdAt;
 
     public AdEvent(
             Long campaignId,
             Long bannerId,
+            Long memberId,
             AdEventType eventType,
             String impressionId
     ) {
         this.campaignId = campaignId;
         this.bannerId = bannerId;
+        this.memberId = memberId;
         this.eventType = eventType;
         this.impressionId = impressionId;
     }
-
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

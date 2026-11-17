@@ -42,6 +42,20 @@ import com.needitbe.domain.chat.repository.ChatRoomRepository;
 
 import com.needitbe.domain.block.repository.BlockRepository;
 
+import com.needitbe.domain.useraction.kafka.UserActionProducer;
+import com.needitbe.domain.request.entity.RequestCategory;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.Map;
+import java.util.UUID;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OfferService {
@@ -54,6 +68,9 @@ public class OfferService {
     private final S3Service s3Service;
     private final ChatRoomRepository chatRoomRepository;
     private final NotificationService notificationService;
+
+    private final UserActionProducer userActionProducer;
+    private final ObjectMapper objectMapper;
 
     // =====================================================
     // 1. 물품 제공 제안 등록
@@ -121,6 +138,7 @@ public class OfferService {
         Offer savedOffer = offerRepository.saveAndFlush(offer);
 
         // ==========================================
+        // ==========================================
         // 7. 요청글 작성자에게 알림 생성
         // ==========================================
 
@@ -133,7 +151,22 @@ public class OfferService {
                 savedOffer.getId()
         );
 
-        // 8. 응답 반환
+        // ==========================================
+        // 8. Kafka OFFER 이벤트 발행 예약
+        // ==========================================
+
+        RequestCategory category = itemRequest.getCategory();
+
+        publishOfferEvent(
+                memberId,
+                requestId,
+                category
+        );
+
+        // ==========================================
+        // 9. 응답 반환
+        // ==========================================
+
         return OfferResponse.from(savedOffer);
     }
 
@@ -598,6 +631,104 @@ public class OfferService {
 
         return OfferResponse.from(offer);
     }
+
+        // =====================================================
+// Kafka OFFER 이벤트 발행
+// =====================================================
+        private void publishOfferEvent(
+                Long memberId,
+                Long requestId,
+                RequestCategory category
+) {
+
+            try {
+
+                // 1. 이벤트 고유 ID 생성
+                String eventId = UUID.randomUUID().toString();
+
+                // 2. Kafka 이벤트 데이터 생성
+                Map<String, Object> event = Map.of(
+                        "eventId", eventId,
+                        "userId", memberId,
+                        "action", "OFFER",
+                        "requestId", requestId,
+                        "category", category.name()
+                );
+
+                // 3. JSON 변환
+                String message = objectMapper.writeValueAsString(event);
+
+                // 4. 트랜잭션 커밋 이후 Kafka 전송
+                if (TransactionSynchronizationManager.isActualTransactionActive()
+                        && TransactionSynchronizationManager.isSynchronizationActive()) {
+
+                    TransactionSynchronizationManager.registerSynchronization(
+                            new TransactionSynchronization() {
+
+                                @Override
+                                public void afterCommit() {
+
+                                    sendOfferEvent(
+                                            memberId,
+                                            requestId,
+                                            message
+                                    );
+                                }
+                            }
+                    );
+
+                } else {
+
+                    sendOfferEvent(
+                            memberId,
+                            requestId,
+                            message
+                    );
+                }
+
+            } catch (Exception e) {
+
+                log.error(
+                        "OFFER 이벤트 생성 실패 - memberId: {}, requestId: {}",
+                        memberId,
+                        requestId,
+                        e
+                );
+            }
+        }
+
+// =====================================================
+// Kafka OFFER 메시지 전송
+// =====================================================
+        private void sendOfferEvent(
+                Long memberId,
+                Long requestId,
+                String message
+) {
+
+            try {
+
+                userActionProducer.send(
+                        memberId.toString(),
+                        message
+                );
+
+                log.info(
+                        "OFFER 이벤트 발행 요청 - memberId: {}, requestId: {}",
+                        memberId,
+                        requestId
+                );
+
+            } catch (Exception e) {
+
+                log.error(
+                        "OFFER 이벤트 발행 실패 - memberId: {}, requestId: {}",
+                        memberId,
+                        requestId,
+                        e
+                );
+            }
+        }
 
 
 }

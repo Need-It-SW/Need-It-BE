@@ -39,12 +39,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.needitbe.domain.useraction.kafka.UserActionProducer;
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.Map;
+import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RequestService {
 
 
+    private final UserActionProducer userActionProducer;
+    private final ObjectMapper objectMapper;
     private final FavoriteRepository favoriteRepository;
     private final OfferRepository offerRepository;
     private final ItemRequestRepository itemRequestRepository;
@@ -200,29 +208,58 @@ public class RequestService {
     }
 
     // =====================================================
-    // 5. 요청 게시글 상세 조회 (로그인)
-    // =====================================================
+
+// 5. 요청 게시글 상세 조회 (로그인)
+
+// =====================================================
+
     @Transactional(readOnly = true)
+
     public RequestResponse getRequest(
+
             Long memberId,
+
             Long requestId
+
     ) {
 
+        // 1. 게시글 조회
+
         ItemRequest itemRequest = itemRequestRepository.findById(requestId)
+
                 .orElseThrow(() ->
+
                         new CustomException(ErrorCode.REQUEST_NOT_FOUND)
+
                 );
 
-        // 관심 등록 여부 확인
+        // 2. 관심 등록 여부 확인
+
         boolean isFavorite =
+
                 favoriteRepository.existsByMemberIdAndItemRequestId(
+
                         memberId,
+
                         requestId
+
                 );
 
-        return toResponse(itemRequest, isFavorite);
-    }
+        // 3. 기존 응답 DTO 생성
 
+        RequestResponse response = toResponse(itemRequest, isFavorite);
+
+        // 4. 게시글 카테고리 확보
+
+        RequestCategory category = itemRequest.getCategory();
+
+        // 5. Kafka VIEW 이벤트 발행 예약
+
+        publishViewEvent(memberId, requestId, category);
+
+        return response;
+
+    }
     // =====================================================
     // 6. 요청 게시글 수정
     // =====================================================
@@ -595,5 +632,92 @@ public class RequestService {
         // 최신순 (기본값)
         return Sort.by(Sort.Direction.DESC, "createdAt")
                 .and(Sort.by(Sort.Direction.DESC, "id"));
+    }
+
+    // =====================================================
+// Kafka VIEW 이벤트 발행
+// =====================================================
+    private void publishViewEvent(
+            Long memberId,
+            Long requestId,
+            RequestCategory category
+    ) {
+
+        try {
+
+            // 1. Kafka 이벤트 생성
+            String eventId = UUID.randomUUID().toString();
+
+            Map<String, Object> event = Map.of(
+                    "eventId", eventId,
+                    "userId", memberId,
+                    "action", "VIEW",
+                    "requestId", requestId,
+                    "category", category.name()
+            );
+
+            // 2. JSON 변환
+            String message = objectMapper.writeValueAsString(event);
+
+            // 3. DB 트랜잭션 커밋 후 Kafka 발행
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+
+                TransactionSynchronizationManager.registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+                                sendViewEvent(memberId, requestId, message);
+                            }
+                        }
+                );
+
+            } else {
+
+                // 트랜잭션이 없는 경우 바로 발행
+                sendViewEvent(memberId, requestId, message);
+            }
+
+        } catch (Exception e) {
+
+            // Kafka 이벤트 생성 실패가 게시글 조회 실패로 이어지지 않도록 처리
+            log.error(
+                    "VIEW 이벤트 생성 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
+    }
+
+    private void sendViewEvent(
+            Long memberId,
+            Long requestId,
+            String message
+    ) {
+
+        try {
+
+            userActionProducer.send(
+                    memberId.toString(),
+                    message
+            );
+
+            log.info(
+                    "VIEW 이벤트 발행 요청 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "VIEW 이벤트 발행 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
     }
 }

@@ -13,8 +13,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.needitbe.domain.favorite.dto.FavoriteResponse;
 
+import com.needitbe.domain.useraction.kafka.UserActionProducer;
+
+import com.needitbe.domain.request.entity.RequestCategory;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.transaction.support.TransactionSynchronization;
+
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.Map;
+
+import java.util.UUID;
+
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -24,13 +41,16 @@ public class FavoriteService {
     private final MemberRepository memberRepository;
     private final ItemRequestRepository itemRequestRepository;
 
+    private final UserActionProducer userActionProducer;
+    private final ObjectMapper objectMapper;
+
     // =====================================================
-    // 1. 관심 게시글 등록
-    // =====================================================
+// 1. 관심 게시글 등록
+// =====================================================
     @Transactional
     public void addFavorite(Long memberId, Long itemRequestId) {
 
-        // 회원 존재 여부 확인
+        // 1. 회원 존재 여부 확인
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() ->
                         new IllegalArgumentException(
@@ -38,7 +58,7 @@ public class FavoriteService {
                         )
                 );
 
-        // 요청 게시글 존재 여부 확인
+        // 2. 게시글 존재 여부 확인
         ItemRequest itemRequest =
                 itemRequestRepository.findById(itemRequestId)
                         .orElseThrow(() ->
@@ -47,7 +67,7 @@ public class FavoriteService {
                                 )
                         );
 
-        // 중복 관심 등록 방지
+        // 3. 중복 관심 등록 방지
         boolean alreadyFavorite =
                 favoriteRepository.existsByMemberIdAndItemRequestId(
                         memberId,
@@ -60,13 +80,23 @@ public class FavoriteService {
             );
         }
 
-        // 관심 게시글 저장
+        // 4. 관심 게시글 저장
         Favorite favorite = new Favorite(
                 member,
                 itemRequest
         );
 
         favoriteRepository.save(favorite);
+
+        // 5. 실제 게시글 카테고리 가져오기
+        RequestCategory category = itemRequest.getCategory();
+
+        // 6. Kafka FAVORITE 이벤트 발행 예약
+        publishFavoriteEvent(
+                memberId,
+                itemRequestId,
+                category
+        );
     }
 
     // =====================================================
@@ -101,5 +131,100 @@ public class FavoriteService {
                 .stream()
                 .map(FavoriteResponse::from)
                 .toList();
+    }
+
+    // =====================================================
+// Kafka FAVORITE 이벤트 발행
+// =====================================================
+    private void publishFavoriteEvent(
+            Long memberId,
+            Long requestId,
+            RequestCategory category
+    ) {
+
+        try {
+
+            // 1. 이벤트 고유 ID 생성
+            String eventId = UUID.randomUUID().toString();
+
+            // 2. Kafka 메시지 생성
+            Map<String, Object> event = Map.of(
+                    "eventId", eventId,
+                    "userId", memberId,
+                    "action", "FAVORITE",
+                    "requestId", requestId,
+                    "category", category.name()
+            );
+
+            // 3. JSON 변환
+            String message = objectMapper.writeValueAsString(event);
+
+            // 4. DB 커밋 이후 Kafka 전송
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+
+                TransactionSynchronizationManager.registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+
+                                sendFavoriteEvent(
+                                        memberId,
+                                        requestId,
+                                        message
+                                );
+                            }
+                        }
+                );
+
+            } else {
+
+                sendFavoriteEvent(
+                        memberId,
+                        requestId,
+                        message
+                );
+            }
+
+        } catch (Exception e) {
+
+            log.error(
+                    "FAVORITE 이벤트 생성 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
+    }
+
+    private void sendFavoriteEvent(
+            Long memberId,
+            Long requestId,
+            String message
+    ) {
+
+        try {
+
+            userActionProducer.send(
+                    memberId.toString(),
+                    message
+            );
+
+            log.info(
+                    "FAVORITE 이벤트 발행 요청 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "FAVORITE 이벤트 발행 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
     }
 }

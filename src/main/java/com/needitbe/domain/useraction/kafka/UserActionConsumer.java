@@ -1,5 +1,6 @@
 package com.needitbe.domain.useraction.kafka;
 
+import com.needitbe.domain.request.entity.RequestCategory;
 import com.needitbe.domain.useraction.entity.UserActionLog;
 import com.needitbe.domain.useraction.repository.UserActionLogRepository;
 
@@ -32,34 +33,37 @@ public class UserActionConsumer {
     public void consume(String message) {
 
         try {
-            // 1. JSON 파싱
             JsonNode json = objectMapper.readTree(message);
 
-            // 2. eventId 추출
+            if (json == null || !json.isObject()) {
+                log.warn("유효하지 않은 Kafka JSON 객체");
+                return;
+            }
+
+            // 1. eventId 검증
             JsonNode eventIdNode = json.get("eventId");
 
             if (eventIdNode == null || !eventIdNode.isTextual()) {
-                log.warn("eventId가 없는 이벤트 - 저장 제외");
+                log.warn("eventId가 없는 이벤트");
                 return;
             }
 
             String eventId = eventIdNode.asText();
 
-            // UUID 형식 검증
             try {
                 UUID.fromString(eventId);
             } catch (IllegalArgumentException e) {
-                log.warn("잘못된 eventId 형식 - 저장 제외");
+                log.warn("잘못된 eventId 형식");
                 return;
             }
 
-            // 3. 중복 이벤트 확인
+            // 2. 중복 이벤트 확인
             if (userActionLogRepository.existsByEventId(eventId)) {
                 log.info("이미 처리한 Kafka 이벤트 - eventId: {}", eventId);
                 return;
             }
 
-            // 4. 사용자 ID 추출
+            // 3. 회원 ID 추출
             Long memberId = null;
 
             JsonNode userIdNode = json.get("userId");
@@ -69,63 +73,137 @@ public class UserActionConsumer {
                 if (!userIdNode.isIntegralNumber()
                         || !userIdNode.canConvertToLong()) {
 
-                    log.warn("잘못된 사용자 ID 형식 - 저장 제외");
+                    log.warn("잘못된 사용자 ID");
                     return;
                 }
 
                 memberId = userIdNode.longValue();
+
+                if (memberId <= 0) {
+                    log.warn("유효하지 않은 사용자 ID");
+                    return;
+                }
             }
 
-            // 5. 행동 유형 추출
+            // 4. 행동 유형 확인
             JsonNode actionNode = json.get("action");
 
             if (actionNode == null || !actionNode.isTextual()) {
-                log.warn("행동 유형이 없는 Kafka 메시지");
+                log.warn("행동 유형이 없는 이벤트");
                 return;
             }
 
             String action = actionNode.asText();
 
-            // 현재는 검색 이벤트만 저장
-            if (!"SEARCH".equals(action)) {
-                log.warn("지원하지 않는 사용자 행동 유형: {}", action);
+            // 5. SEARCH 처리
+            if ("SEARCH".equals(action)) {
+
+                JsonNode keywordNode = json.get("keyword");
+
+                if (keywordNode == null || !keywordNode.isTextual()) {
+                    log.warn("검색어가 없는 이벤트");
+                    return;
+                }
+
+                String keyword = keywordNode.asText();
+
+                if (keyword.isBlank() || keyword.length() > 100) {
+                    log.warn("유효하지 않은 검색어");
+                    return;
+                }
+
+                userActionLogRepository.save(
+                        new UserActionLog(
+                                eventId,
+                                memberId,
+                                action,
+                                keyword
+                        )
+                );
+
+                log.info(
+                        "SEARCH 행동 저장 - memberId: {}, keyword: {}",
+                        memberId,
+                        keyword
+                );
+
                 return;
             }
 
-            // 6. 검색어 추출
-            JsonNode keywordNode = json.get("keyword");
+            // 6. VIEW / FAVORITE / OFFER 처리
+            if (!"VIEW".equals(action)
+                    && !"FAVORITE".equals(action)
+                    && !"OFFER".equals(action)) {
 
-            if (keywordNode == null || !keywordNode.isTextual()) {
-                log.warn("검색어가 없는 Kafka 메시지");
+                log.warn("지원하지 않는 행동 유형: {}", action);
                 return;
             }
 
-            String keyword = keywordNode.asText();
-
-            if (keyword.isBlank() || keyword.length() > 100) {
-                log.warn("유효하지 않은 검색어");
+            // 개인화 행동은 회원 ID 필수
+            if (memberId == null) {
+                log.warn("회원 ID가 없는 개인화 행동 이벤트");
                 return;
             }
 
-            // 7. DB 저장
-            UserActionLog userActionLog = new UserActionLog(
-                    eventId,
-                    memberId,
-                    action,
-                    keyword
+            // 7. 게시글 ID 추출
+            JsonNode requestIdNode = json.get("requestId");
+
+            if (requestIdNode == null
+                    || !requestIdNode.isIntegralNumber()
+                    || !requestIdNode.canConvertToLong()) {
+
+                log.warn("유효하지 않은 게시글 ID");
+                return;
+            }
+
+            Long requestId = requestIdNode.longValue();
+
+            if (requestId <= 0) {
+                log.warn("게시글 ID는 1 이상이어야 합니다.");
+                return;
+            }
+
+            // 8. 카테고리 추출
+            JsonNode categoryNode = json.get("category");
+
+            if (categoryNode == null || !categoryNode.isTextual()) {
+                log.warn("카테고리가 없는 행동 이벤트");
+                return;
+            }
+
+            RequestCategory category;
+
+            try {
+                category = RequestCategory.valueOf(
+                        categoryNode.asText()
+                );
+            } catch (IllegalArgumentException e) {
+                log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                return;
+            }
+
+            // 9. 행동 로그 저장
+            userActionLogRepository.save(
+                    new UserActionLog(
+                            eventId,
+                            memberId,
+                            action,
+                            null,
+                            requestId,
+                            category
+                    )
             );
 
-            userActionLogRepository.save(userActionLog);
-
             log.info(
-                    "사용자 행동 로그 저장 요청 - eventId: {}, memberId: {}, action: {}",
-                    eventId,
+                    "사용자 행동 저장 - memberId: {}, action: {}, requestId: {}, category: {}",
                     memberId,
-                    action
+                    action,
+                    requestId,
+                    category
             );
 
         } catch (JacksonException e) {
-            log.warn("Kafka JSON 파싱 실패 - 이벤트 저장 제외", e);
+            log.warn("Kafka JSON 파싱 실패", e);
         }
     }
 }

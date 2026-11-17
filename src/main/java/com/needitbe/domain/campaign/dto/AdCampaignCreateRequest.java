@@ -32,6 +32,10 @@ public record AdCampaignCreateRequest(
 
         // 노출 횟수 집계 기간
         @NotBlank(message = "노출 횟수 집계 기간은 필수입니다.")
+        @Pattern(
+                regexp = "TOTAL|ALL|DAILY|WEEKLY|LAST_24_HOURS|LAST_7_DAYS",
+                message = "지원하지 않는 노출 집계 기간입니다."
+        )
         String impressionPeriod,
 
         @NotNull(message = "시작일은 필수입니다.")
