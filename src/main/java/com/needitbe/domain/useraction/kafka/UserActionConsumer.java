@@ -130,6 +130,119 @@ public class UserActionConsumer {
                 return;
             }
 
+            // CATEGORY_CLICK 처리
+            if ("CATEGORY_CLICK".equals(action)) {
+
+                if (memberId == null) {
+                    log.warn("회원 ID가 없는 카테고리 클릭 이벤트");
+                    return;
+                }
+
+                JsonNode categoryNode = json.get("category");
+
+                if (categoryNode == null || !categoryNode.isTextual()) {
+                    log.warn("카테고리가 없는 클릭 이벤트");
+                    return;
+                }
+
+                RequestCategory category;
+
+                try {
+                    category = RequestCategory.valueOf(
+                            categoryNode.asText()
+                    );
+                } catch (IllegalArgumentException e) {
+                    log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                    return;
+                }
+
+                userActionLogRepository.save(
+                        new UserActionLog(
+                                eventId,
+                                memberId,
+                                action,
+                                null,
+                                null,
+                                category
+                        )
+                );
+
+                log.info(
+                        "CATEGORY_CLICK 저장 - memberId: {}, category: {}",
+                        memberId,
+                        category
+                );
+
+                return;
+            }
+
+            // REQUEST_CREATE 처리
+            if ("REQUEST_CREATE".equals(action)) {
+
+                if (memberId == null) {
+                    log.warn("회원 ID가 없는 요청 등록 이벤트");
+                    return;
+                }
+
+                // 게시글 ID 확인
+                JsonNode requestIdNode = json.get("requestId");
+
+                if (requestIdNode == null
+                        || !requestIdNode.isIntegralNumber()
+                        || !requestIdNode.canConvertToLong()) {
+
+                    log.warn("유효하지 않은 요청 게시글 ID");
+                    return;
+                }
+
+                Long requestId = requestIdNode.longValue();
+
+                if (requestId <= 0) {
+                    log.warn("게시글 ID는 1 이상이어야 합니다.");
+                    return;
+                }
+
+                // 카테고리 확인
+                JsonNode categoryNode = json.get("category");
+
+                if (categoryNode == null || !categoryNode.isTextual()) {
+                    log.warn("카테고리가 없는 요청 등록 이벤트");
+                    return;
+                }
+
+                RequestCategory category;
+
+                try {
+                    category = RequestCategory.valueOf(
+                            categoryNode.asText()
+                    );
+                } catch (IllegalArgumentException e) {
+                    log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                    return;
+                }
+
+                // 행동 로그 저장
+                userActionLogRepository.save(
+                        new UserActionLog(
+                                eventId,
+                                memberId,
+                                action,
+                                null,
+                                requestId,
+                                category
+                        )
+                );
+
+                log.info(
+                        "REQUEST_CREATE 저장 - memberId: {}, requestId: {}, category: {}",
+                        memberId,
+                        requestId,
+                        category
+                );
+
+                return;
+            }
+
             // 6. VIEW / FAVORITE / OFFER 처리
             if (!"VIEW".equals(action)
                     && !"FAVORITE".equals(action)

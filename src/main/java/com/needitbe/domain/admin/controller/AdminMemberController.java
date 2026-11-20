@@ -1,5 +1,6 @@
 package com.needitbe.domain.admin.controller;
 
+import com.needitbe.domain.admin.dto.AdminSanctionHistoryResponse;
 import com.needitbe.domain.admin.dto.MemberSanctionRequest;
 import com.needitbe.domain.admin.dto.MemberSanctionResponse;
 import com.needitbe.domain.admin.service.AdminMemberService;
@@ -106,6 +107,23 @@ public class AdminMemberController {
         return ApiResponse.success(
                 "관리자 회원 상세 조회에 성공했습니다.",
                 adminMemberService.getMember(memberId)
+        );
+    }
+
+    @GetMapping("/sanctions")
+    public ApiResponse<Page<AdminSanctionHistoryResponse>> getAllSanctionHistories(
+            @ParameterObject
+            @PageableDefault(
+                    size = 10,
+                    sort = "startedAt",
+                    direction = Sort.Direction.DESC
+            )
+            Pageable pageable
+    ) {
+
+        return ApiResponse.success(
+                "전체 회원 제재 이력 조회에 성공했습니다.",
+                adminMemberService.getAllSanctionHistories(pageable)
         );
     }
 }

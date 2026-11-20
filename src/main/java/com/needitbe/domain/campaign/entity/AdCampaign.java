@@ -111,15 +111,24 @@ public class AdCampaign {
 
 
 
-    // 캠페인 생성자
     public AdCampaign(AdCampaignCreateRequest request) {
 
         this.name = request.name().trim();
         this.adType = request.adType();
 
-        this.targetCategory = request.targetCategory();
-        this.targetAction = request.targetAction();
-        this.targetKeywords = request.targetKeywords();
+        if (this.adType == AdType.GENERAL) {
+
+            this.targetCategory = null;
+            this.targetAction = null;
+            this.targetKeywords = null;
+
+        } else {
+
+            this.targetCategory = request.targetCategory();
+            this.targetAction = request.targetAction();
+            this.targetKeywords = request.targetKeywords();
+        }
+
         this.targetRegions = request.targetRegions();
 
         this.maxImpressions = request.maxImpressions();
@@ -131,15 +140,24 @@ public class AdCampaign {
         this.description = request.description();
         this.active = request.active();
     }
-
     public void update(AdCampaignUpdateRequest request) {
 
         this.name = request.name().trim();
         this.adType = request.adType();
 
-        this.targetCategory = request.targetCategory();
-        this.targetAction = request.targetAction();
-        this.targetKeywords = request.targetKeywords();
+        if (this.adType == AdType.GENERAL) {
+
+            this.targetCategory = null;
+            this.targetAction = null;
+            this.targetKeywords = null;
+
+        } else {
+
+            this.targetCategory = request.targetCategory();
+            this.targetAction = request.targetAction();
+            this.targetKeywords = request.targetKeywords();
+        }
+
         this.targetRegions = request.targetRegions();
 
         this.maxImpressions = request.maxImpressions();
@@ -151,5 +169,4 @@ public class AdCampaign {
         this.description = request.description();
         this.active = request.active();
     }
-
 }

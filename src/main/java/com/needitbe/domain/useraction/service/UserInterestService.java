@@ -100,4 +100,13 @@ public class UserInterestService {
 
         return keywords;
     }
+
+    // 회원별 최근 행동 로그 조회
+    public List<UserActionLog> getRecentActions(Long memberId) {
+
+        return userActionLogRepository
+                .findTop100ByMemberIdOrderByCreatedAtDescIdDesc(
+                        memberId
+                );
+    }
 }

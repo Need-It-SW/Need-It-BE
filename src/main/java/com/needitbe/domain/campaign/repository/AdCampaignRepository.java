@@ -36,4 +36,15 @@ public interface AdCampaignRepository
     List<AdCampaign> findRunningCampaignsByAdType(
             @Param("adType") AdType adType
     );
+
+    // 현재 진행 중인 전체 캠페인 조회
+    @Query("""
+    SELECT c
+    FROM AdCampaign c
+    WHERE c.active = true
+      AND c.startDate <= CURRENT_DATE
+      AND c.endDate >= CURRENT_DATE
+    ORDER BY c.id DESC
+    """)
+    List<AdCampaign> findAllRunningCampaigns();
 }

@@ -3,10 +3,13 @@ package com.needitbe.domain.useraction.repository;
 import com.needitbe.domain.useraction.entity.UserActionLog;
 import com.needitbe.domain.request.entity.RequestCategory;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface UserActionLogRepository
@@ -49,4 +52,81 @@ public interface UserActionLogRepository
             Long memberId,
             String action
     );
+
+    // 회원별 최근 행동 로그 100개 조회
+    List<UserActionLog> findTop100ByMemberIdOrderByCreatedAtDescIdDesc(
+            Long memberId
+    );
+
+    @Query(
+            value = """
+        SELECT u
+        FROM UserActionLog u
+        WHERE (:action IS NULL OR u.action = :action)
+          AND (:category IS NULL OR u.category = :category)
+          AND (:keyword IS NULL
+               OR LOWER(u.keyword) LIKE LOWER(CONCAT('%', :keyword, '%')))
+          AND (:startDate IS NULL OR u.createdAt >= :startDate)
+          AND (:endDate IS NULL OR u.createdAt < :endDate)
+          AND (
+              :search IS NULL
+              OR LOWER(u.action) LIKE LOWER(CONCAT('%', :search, '%'))
+              OR LOWER(CAST(u.category AS String))
+                  LIKE LOWER(CONCAT('%', :search, '%'))
+              OR LOWER(u.keyword) LIKE LOWER(CONCAT('%', :search, '%'))
+          )
+        """,
+            countQuery = """
+        SELECT COUNT(u)
+        FROM UserActionLog u
+        WHERE (:action IS NULL OR u.action = :action)
+          AND (:category IS NULL OR u.category = :category)
+          AND (:keyword IS NULL
+               OR LOWER(u.keyword) LIKE LOWER(CONCAT('%', :keyword, '%')))
+          AND (:startDate IS NULL OR u.createdAt >= :startDate)
+          AND (:endDate IS NULL OR u.createdAt < :endDate)
+          AND (
+              :search IS NULL
+              OR LOWER(u.action) LIKE LOWER(CONCAT('%', :search, '%'))
+              OR LOWER(CAST(u.category AS String))
+                  LIKE LOWER(CONCAT('%', :search, '%'))
+              OR LOWER(u.keyword) LIKE LOWER(CONCAT('%', :search, '%'))
+          )
+        """
+    )
+    Page<UserActionLog> searchAdminLogs(
+            @Param("action") String action,
+            @Param("category") RequestCategory category,
+            @Param("keyword") String keyword,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            @Param("search") String search,
+            Pageable pageable
+    );
+
+    @Query("""
+    SELECT u.category, COUNT(u)
+    FROM UserActionLog u
+    GROUP BY u.category
+    ORDER BY COUNT(u) DESC
+    """)
+    List<Object[]> countLogsByCategory();
+
+    // 대시보드 캠페인 조건 매칭용 행동 로그 조회
+    @Query("""
+    SELECT u
+    FROM UserActionLog u
+    WHERE u.category IS NOT NULL
+       OR u.keyword IS NOT NULL
+       OR u.action IS NOT NULL
+    """)
+    List<UserActionLog> findLogsForDashboardMatching();
+
+    @Query("""
+    SELECT l.action, COUNT(l)
+    FROM UserActionLog l
+    GROUP BY l.action
+    ORDER BY COUNT(l) DESC
+""")
+    List<Object[]> countByActionType();
 }

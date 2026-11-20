@@ -1,5 +1,6 @@
 package com.needitbe.domain.admin.service;
 
+import com.needitbe.domain.admin.dto.AdminSanctionHistoryResponse;
 import com.needitbe.domain.admin.dto.MemberSanctionRequest;
 
 import com.needitbe.domain.admin.dto.MemberSanctionResponse;
@@ -188,6 +189,16 @@ public class AdminMemberService {
                 );
 
         return AdminMemberResponse.from(member);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AdminSanctionHistoryResponse> getAllSanctionHistories(
+            Pageable pageable
+    ) {
+
+        return sanctionRepository
+                .findAllByOrderByStartedAtDesc(pageable)
+                .map(AdminSanctionHistoryResponse::from);
     }
 
 }

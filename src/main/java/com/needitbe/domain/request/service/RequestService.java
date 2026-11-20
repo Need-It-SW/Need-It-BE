@@ -85,6 +85,13 @@ public class RequestService {
         ItemRequest savedRequest =
                 itemRequestRepository.save(itemRequest);
 
+// 요청 등록 행동 이벤트 발행 예약
+        publishRequestCreateEvent(
+                memberId,
+                savedRequest.getId(),
+                savedRequest.getCategory()
+        );
+
         return toResponse(savedRequest);
     }
 
@@ -714,6 +721,95 @@ public class RequestService {
 
             log.error(
                     "VIEW 이벤트 발행 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
+    }
+
+    // =====================================================
+// Kafka REQUEST_CREATE 이벤트 발행
+// =====================================================
+    private void publishRequestCreateEvent(
+            Long memberId,
+            Long requestId,
+            RequestCategory category
+    ) {
+
+        try {
+            String eventId = UUID.randomUUID().toString();
+
+            Map<String, Object> event = Map.of(
+                    "eventId", eventId,
+                    "userId", memberId,
+                    "action", "REQUEST_CREATE",
+                    "requestId", requestId,
+                    "category", category.name()
+            );
+
+            String message = objectMapper.writeValueAsString(event);
+
+            // DB 커밋 성공 후 Kafka 발행
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+
+                TransactionSynchronizationManager.registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+                                sendRequestCreateEvent(
+                                        memberId,
+                                        requestId,
+                                        message
+                                );
+                            }
+                        }
+                );
+
+            } else {
+                sendRequestCreateEvent(
+                        memberId,
+                        requestId,
+                        message
+                );
+            }
+
+        } catch (Exception e) {
+
+            log.error(
+                    "REQUEST_CREATE 이벤트 생성 실패 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId,
+                    e
+            );
+        }
+    }
+
+    // Kafka 전송
+    private void sendRequestCreateEvent(
+            Long memberId,
+            Long requestId,
+            String message
+    ) {
+
+        try {
+            userActionProducer.send(
+                    memberId.toString(),
+                    message
+            );
+
+            log.info(
+                    "REQUEST_CREATE 이벤트 발행 요청 - memberId: {}, requestId: {}",
+                    memberId,
+                    requestId
+            );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "REQUEST_CREATE 이벤트 발행 실패 - memberId: {}, requestId: {}",
                     memberId,
                     requestId,
                     e

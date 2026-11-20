@@ -2,6 +2,7 @@ package com.needitbe.domain.report.controller;
 
 import com.needitbe.domain.report.dto.ReportResponse;
 import com.needitbe.domain.report.dto.ReportStatusUpdateRequest;
+import com.needitbe.domain.report.dto.ReportedMemberResponse;
 import com.needitbe.domain.report.entity.ReportStatus;
 import com.needitbe.domain.report.service.ReportService;
 import com.needitbe.global.common.ApiResponse;
@@ -77,6 +78,20 @@ public class AdminReportController {
                                 reportId,
                                 request
                         )
+                )
+        );
+    }
+
+    @GetMapping("/targets/members")
+    public ResponseEntity<ApiResponse<Page<ReportedMemberResponse>>> getReportedMembers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "신고 대상 사용자 목록 조회에 성공했습니다.",
+                        reportService.getReportedMembers(page, size)
                 )
         );
     }

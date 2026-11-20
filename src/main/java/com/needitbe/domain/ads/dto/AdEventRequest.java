@@ -17,7 +17,9 @@ public record AdEventRequest(
 
         @NotBlank
         @UUID
-        String impressionId
+        String impressionId,
+
+        String placement
 
 ) {
 }

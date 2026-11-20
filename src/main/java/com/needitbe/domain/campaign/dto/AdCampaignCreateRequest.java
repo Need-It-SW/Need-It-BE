@@ -1,9 +1,12 @@
 package com.needitbe.domain.campaign.dto;
 
 import com.needitbe.domain.campaign.entity.AdType;
+import com.needitbe.domain.request.entity.RequestCategory;
 import jakarta.validation.constraints.*;
 
 import java.time.LocalDate;
+import java.util.Locale;
+import java.util.Set;
 
 public record AdCampaignCreateRequest(
 
@@ -59,5 +62,48 @@ public record AdCampaignCreateRequest(
         }
 
         return !endDate.isBefore(startDate);
+    }
+
+    @AssertTrue(message = "일반 광고는 개인화 타깃을 설정할 수 없습니다.")
+    public boolean isValidGeneralAd() {
+
+        if (adType != AdType.GENERAL) {
+            return true;
+        }
+
+        return (targetCategory == null || targetCategory.isBlank())
+                && (targetAction == null || targetAction.isBlank())
+                && (targetKeywords == null || targetKeywords.isBlank());
+    }
+
+    @AssertTrue(message = "개인화 광고의 타깃 카테고리 또는 행동 유형이 올바르지 않습니다.")
+    public boolean isValidPersonalizedAd() {
+
+        if (adType != AdType.PERSONALIZED) {
+            return true;
+        }
+
+        if (targetCategory == null || targetCategory.isBlank()
+                || targetAction == null || targetAction.isBlank()) {
+            return false;
+        }
+
+        try {
+            RequestCategory.valueOf(
+                    targetCategory.trim().toUpperCase(Locale.ROOT)
+            );
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+
+        return Set.of(
+                "SEARCH",
+                "CATEGORY_CLICK",
+                "VIEW",
+                "REQUEST_CREATE",
+                "FAVORITE",
+                "OFFER",
+                "ALL"
+        ).contains(targetAction.trim().toUpperCase(Locale.ROOT));
     }
 }

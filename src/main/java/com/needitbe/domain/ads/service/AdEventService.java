@@ -87,7 +87,8 @@ public class AdEventService {
                 request.bannerId(),
                 memberId,
                 AdEventType.IMPRESSION,
-                request.impressionId()
+                request.impressionId(),
+                request.placement()
         );
 
         // 7. DB 저장
@@ -95,10 +96,11 @@ public class AdEventService {
     }
 
     // 광고 클릭 기록
+    // 광고 클릭 기록
     @Transactional
     public void recordClick(AdEventRequest request) {
 
-        // 1. 노출 기록 조회
+        // 1. 기존 광고 노출 기록 조회
         AdEvent impression = adEventRepository
                 .findByImpressionIdAndEventType(
                         request.impressionId(),
@@ -136,9 +138,17 @@ public class AdEventService {
         AdEvent event = new AdEvent(
                 request.campaignId(),
                 request.bannerId(),
+
+                // 기존 노출 기록의 회원 ID
                 impression.getMemberId(),
+
+                // 클릭 이벤트로 저장
                 AdEventType.CLICK,
-                request.impressionId()
+
+                request.impressionId(),
+
+                // 기존 노출 기록의 위치 사용
+                impression.getPlacement()
         );
 
         // 7. DB 저장

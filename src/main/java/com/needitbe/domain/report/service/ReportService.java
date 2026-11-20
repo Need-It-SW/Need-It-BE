@@ -2,8 +2,7 @@ package com.needitbe.domain.report.service;
 
 import com.needitbe.domain.member.entity.Member;
 import com.needitbe.domain.member.repository.MemberRepository;
-import com.needitbe.domain.report.dto.ReportCreateRequest;
-import com.needitbe.domain.report.dto.ReportResponse;
+import com.needitbe.domain.report.dto.*;
 import com.needitbe.domain.report.entity.Report;
 import com.needitbe.domain.report.entity.ReportStatus;
 import com.needitbe.domain.report.entity.ReportType;
@@ -16,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.needitbe.domain.request.entity.ItemRequest;
 import com.needitbe.domain.request.repository.ItemRequestRepository;
 import java.util.List;
-import com.needitbe.domain.report.dto.ReportStatusUpdateRequest;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -216,5 +214,42 @@ public class ReportService {
                 );
 
         return ReportResponse.from(report);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReportedMemberResponse> getReportedMembers(
+            int page,
+            int size
+    ) {
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<ReportedMemberProjection> reportedMembers =
+                reportRepository.findReportedMembers(
+                        ReportType.MEMBER,
+                        ReportStatus.PENDING,
+                        ReportStatus.IN_REVIEW,
+                        ReportStatus.RESOLVED,
+                        ReportStatus.REJECTED,
+                        pageable
+                );
+
+        return reportedMembers.map(result -> {
+
+            Member member = memberRepository
+                    .findById(result.getMemberId())
+                    .orElseThrow(() ->
+                            new CustomException(ErrorCode.MEMBER_NOT_FOUND)
+                    );
+
+            return ReportedMemberResponse.from(
+                    member,
+                    result.getReportCount(),
+                    result.getPendingCount(),
+                    result.getInReviewCount(),
+                    result.getResolvedCount(),
+                    result.getRejectedCount()
+            );
+        });
     }
 }

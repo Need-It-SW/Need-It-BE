@@ -11,6 +11,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import com.needitbe.domain.ads.entity.AdEvent;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 public interface AdEventRepository
         extends JpaRepository<AdEvent, Long> {
 
@@ -110,4 +116,18 @@ public interface AdEventRepository
             LocalDateTime start
     );
 
+    @Query("""
+    SELECT e
+    FROM AdEvent e
+    WHERE e.campaignId = :campaignId
+      AND (:start IS NULL OR e.createdAt >= :start)
+      AND (:eventType IS NULL OR e.eventType = :eventType)
+    ORDER BY e.createdAt DESC, e.id DESC
+    """)
+    Page<AdEvent> findAdminAdEvents(
+            @Param("campaignId") Long campaignId,
+            @Param("start") LocalDateTime start,
+            @Param("eventType") AdEventType eventType,
+            Pageable pageable
+    );
 }

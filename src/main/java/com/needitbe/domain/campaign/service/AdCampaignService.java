@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -36,21 +37,38 @@ public class AdCampaignService {
         return AdCampaignResponse.from(saved);
     }
 
-    // 캠페인 목록 조회 및 검색
     @Transactional(readOnly = true)
     public List<AdCampaignResponse> getCampaigns(
             String keyword,
             CampaignStatus status
     ) {
 
+        String search = keyword == null
+                ? null
+                : keyword.trim().toLowerCase(Locale.ROOT);
+
         return adCampaignRepository.findAll().stream()
 
-                .filter(campaign ->
-                        keyword == null || keyword.isBlank()
-                                || campaign.getName()
-                                .toLowerCase()
-                                .contains(keyword.trim().toLowerCase())
-                )
+                .filter(campaign -> {
+
+                    if (search == null || search.isBlank()) {
+                        return true;
+                    }
+
+                    boolean nameMatch =
+                            campaign.getName() != null
+                                    && campaign.getName()
+                                    .toLowerCase(Locale.ROOT)
+                                    .contains(search);
+
+                    boolean keywordMatch =
+                            campaign.getTargetKeywords() != null
+                                    && campaign.getTargetKeywords()
+                                    .toLowerCase(Locale.ROOT)
+                                    .contains(search);
+
+                    return nameMatch || keywordMatch;
+                })
 
                 .filter(campaign ->
                         status == null
@@ -60,7 +78,6 @@ public class AdCampaignService {
                 .map(AdCampaignResponse::from)
                 .toList();
     }
-
     // 캠페인 상세 조회
     @Transactional(readOnly = true)
     public AdCampaignResponse getCampaign(Long campaignId) {

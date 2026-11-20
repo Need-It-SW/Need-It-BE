@@ -1,6 +1,8 @@
 package com.needitbe.domain.admin.repository;
 
 import com.needitbe.domain.admin.entity.MemberSanction;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -20,5 +22,9 @@ public interface MemberSanctionRepository
     // 기간이 만료됐지만 아직 해제되지 않은 제재 조회
     List<MemberSanction> findByReleasedAtIsNullAndExpiresAtLessThanEqual(
             LocalDateTime now
+    );
+
+    Page<MemberSanction> findAllByOrderByStartedAtDesc(
+            Pageable pageable
     );
 }

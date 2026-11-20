@@ -48,12 +48,17 @@ public class AdEvent {
     @Column(name = "member_id")
     private Long memberId;
 
+    @Column(name = "placement", length = 50)
+    private String placement;
+
     // 이벤트 발생 시간
     @Column(
             name = "created_at",
             nullable = false,
             updatable = false
     )
+
+
 
 
 
@@ -64,13 +69,15 @@ public class AdEvent {
             Long bannerId,
             Long memberId,
             AdEventType eventType,
-            String impressionId
+            String impressionId,
+            String placement
     ) {
         this.campaignId = campaignId;
         this.bannerId = bannerId;
         this.memberId = memberId;
         this.eventType = eventType;
         this.impressionId = impressionId;
+        this.placement = placement;
     }
     @PrePersist
     protected void onCreate() {
