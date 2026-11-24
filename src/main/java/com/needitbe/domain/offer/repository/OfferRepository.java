@@ -32,4 +32,9 @@ public interface OfferRepository extends JpaRepository<Offer, Long> {
 
     boolean existsByItemRequestId(Long requestId);
 
+    @Query("SELECT o.itemRequest.id, o.status FROM Offer o WHERE o.itemRequest.id IN :requestIds AND o.status IN :statuses")
+    List<Object[]> findStatusesByRequestIds(@Param("requestIds") List<Long> requestIds, @Param("statuses") List<OfferStatus> statuses);
+
+    boolean existsByItemRequestIdAndMemberId(Long requestId, Long memberId);
+
 }

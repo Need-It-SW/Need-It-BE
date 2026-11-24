@@ -6,6 +6,7 @@ import com.needitbe.domain.campaign.entity.CampaignBanner;
 import com.needitbe.domain.campaign.entity.CampaignStatus;
 import com.needitbe.domain.campaign.repository.CampaignBannerRepository;
 import com.needitbe.domain.member.entity.Member;
+import com.needitbe.domain.member.entity.MemberStatus;
 import com.needitbe.domain.member.repository.MemberRepository;
 import com.needitbe.domain.request.entity.RequestCategory;
 import com.needitbe.domain.useraction.entity.UserActionLog;
@@ -98,6 +99,53 @@ public class AdService {
                 .orElseThrow(() ->
                         new CustomException(ErrorCode.MEMBER_NOT_FOUND)
                 );
+        // 제재 회원 개인화 광고 조회 차단 및 제외 사유 기록
+        if (member.getStatus() == MemberStatus.SUSPENDED) {
+
+            log.info(
+                    "제재 회원 개인화 광고 조회 차단 - memberId: {}",
+                    memberId
+            );
+
+            List<CampaignBanner> campaignBanners =
+                    campaignBannerRepository.findByPlacement(placement)
+                            .stream()
+                            .filter(cb ->
+                                    cb.getCampaign().getStatus()
+                                            == CampaignStatus.RUNNING
+                            )
+                            .filter(cb ->
+                                    cb.getCampaign().getAdType()
+                                            == AdType.PERSONALIZED
+                            )
+                            .filter(cb ->
+                                    cb.getBanner().isActive()
+                            )
+                            .toList();
+
+            // 동일 캠페인 중복 평가 방지
+            Set<Long> evaluatedCampaignIds =
+                    new java.util.HashSet<>();
+
+            for (CampaignBanner cb : campaignBanners) {
+
+                Long campaignId = cb.getCampaign().getId();
+
+                if (!evaluatedCampaignIds.add(campaignId)) {
+                    continue;
+                }
+
+                adFilterEvaluationService.saveEvaluation(
+                        campaignId,
+                        memberId,
+                        List.of(
+                                AdExclusionReasonType.MEMBER_SUSPENDED
+                        )
+                );
+            }
+
+            return List.of();
+        }
 
         String memberRegion = member.getRegion();
 

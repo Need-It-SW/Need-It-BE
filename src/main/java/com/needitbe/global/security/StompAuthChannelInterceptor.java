@@ -120,6 +120,33 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 );
             }
 
+            // Authenticated members may subscribe to public request-feed changes.
+            // Clients still fetch the actual post details through the REST API.
+            if (StompCommand.SUBSCRIBE.equals(command)
+                    && "/topic/requests".equals(destination)) {
+                return message;
+            }
+
+            // 관리자 Kafka 행동 로그 실시간 갱신 구독
+            if (StompCommand.SUBSCRIBE.equals(command)
+                    && "/topic/admin/user-actions".equals(destination)) {
+
+                boolean isAdmin = ((org.springframework.security.core.Authentication) principal)
+                        .getAuthorities()
+                        .stream()
+                        .anyMatch(authority ->
+                                "ROLE_ADMIN".equals(authority.getAuthority())
+                        );
+
+                if (!isAdmin) {
+                    throw new org.springframework.security.access.AccessDeniedException(
+                            "관리자만 행동 로그를 구독할 수 있습니다."
+                    );
+                }
+
+                return message;
+            }
+
             // =====================================================
 // 3. 사용자별 알림 및 오류 메시지 구독
 // =====================================================

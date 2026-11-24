@@ -47,6 +47,16 @@ public class ItemRequest {
     @Column(nullable = false, length = 20)
     private RequestStatus status;
 
+    @Column(nullable = false)
+    private boolean deleted = false;
+
+    public void softDelete() {
+        this.deleted = true;
+    }
+
+    @Column(name = "view_count", nullable = false)
+    private long viewCount = 0;
+
     // 작성일
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

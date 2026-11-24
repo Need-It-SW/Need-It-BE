@@ -20,7 +20,9 @@ public record RequestResponse(
         List<RequestImageResponse> images,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        Boolean isFavorite
+        Boolean isFavorite,
+        Long viewCount,
+        String tradeStatus
 
 ) {
 
@@ -29,7 +31,7 @@ public record RequestResponse(
             ItemRequest request,
             List<RequestImageResponse> images
     ) {
-        return from(request, images, false);
+        return from(request, images, false, null);
     }
 
     // 관심 여부를 포함하는 메서드
@@ -39,6 +41,10 @@ public record RequestResponse(
             boolean isFavorite
     ) {
 
+        return from(request, images, isFavorite, null);
+    }
+
+    public static RequestResponse from(ItemRequest request, List<RequestImageResponse> images, boolean isFavorite, String tradeStatus) {
         return new RequestResponse(
                 request.getId(),
                 request.getMember().getId(),
@@ -51,7 +57,9 @@ public record RequestResponse(
                 images,
                 request.getCreatedAt(),
                 request.getUpdatedAt(),
-                isFavorite
+                isFavorite,
+                request.getViewCount(),
+                tradeStatus
         );
     }
 }

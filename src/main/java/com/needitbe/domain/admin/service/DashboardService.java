@@ -1,11 +1,6 @@
 package com.needitbe.domain.admin.service;
 
 import com.needitbe.domain.admin.dto.DashboardCategoryResponse;
-import com.needitbe.domain.useraction.repository.UserActionLogRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.needitbe.domain.admin.dto.DashboardSummaryResponse;
 import com.needitbe.domain.admin.dto.DashboardCampaignMatchResponse;
 
@@ -14,11 +9,17 @@ import com.needitbe.domain.campaign.entity.AdType;
 import com.needitbe.domain.campaign.repository.AdCampaignRepository;
 
 import com.needitbe.domain.useraction.entity.UserActionLog;
+import com.needitbe.domain.useraction.entity.UserActionFilterResult;
+import com.needitbe.domain.useraction.repository.UserActionLogRepository;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
-import java.util.Locale;
-
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -27,10 +28,17 @@ public class DashboardService {
     private final AdCampaignRepository adCampaignRepository;
     private final UserActionLogRepository userActionLogRepository;
 
+
+    // ==========================================
+    // 1. 카테고리별 행동 통계
+    // INCLUDED 이벤트만 집계
+    // ==========================================
+
     @Transactional(readOnly = true)
     public List<DashboardCategoryResponse> getCategoryStatistics() {
 
-        return userActionLogRepository.countLogsByCategory()
+        return userActionLogRepository
+                .countLogsByCategory(UserActionFilterResult.INCLUDED)
                 .stream()
                 .map(row -> {
 
@@ -47,6 +55,11 @@ public class DashboardService {
                 })
                 .toList();
     }
+
+
+    // ==========================================
+    // 2. 캠페인 조건 매칭
+    // ==========================================
 
     private boolean matchesCampaign(
             AdCampaign campaign,
@@ -116,14 +129,23 @@ public class DashboardService {
         return true;
     }
 
+
+    // ==========================================
+    // 3. 캠페인별 매칭 통계
+    // INCLUDED 이벤트만 사용
+    // ==========================================
+
     @Transactional(readOnly = true)
     public List<DashboardCampaignMatchResponse> getCampaignMatches() {
 
         List<AdCampaign> campaigns =
                 adCampaignRepository.findAllRunningCampaigns();
 
+        // Kafka 필터링을 통과한 정상 이벤트만 조회
         List<UserActionLog> logs =
-                userActionLogRepository.findAll();
+                userActionLogRepository.findByFilterResult(
+                        UserActionFilterResult.INCLUDED
+                );
 
         return campaigns.stream()
                 .filter(campaign ->
@@ -148,21 +170,34 @@ public class DashboardService {
                 .toList();
     }
 
+
+    // ==========================================
+    // 4. 관리자 대시보드 요약 통계
+    // ==========================================
+
     @Transactional(readOnly = true)
     public DashboardSummaryResponse getSummary() {
 
+        // 전체 행동 로그 수
+        // INCLUDED / EXCLUDED / NULL 모두 포함
         long totalActionLogs =
                 userActionLogRepository.count();
 
+        // 전체 캠페인 수
         long totalCampaigns =
                 adCampaignRepository.count();
 
+        // 현재 진행 중인 캠페인
         List<AdCampaign> runningCampaigns =
                 adCampaignRepository.findAllRunningCampaigns();
 
+        // 광고 매칭에는 INCLUDED 이벤트만 사용
         List<UserActionLog> logs =
-                userActionLogRepository.findAll();
+                userActionLogRepository.findByFilterResult(
+                        UserActionFilterResult.INCLUDED
+                );
 
+        // 진행 중인 개인화 캠페인과 매칭되는 정상 이벤트 수
         long matchedActionLogs = logs.stream()
                 .filter(log ->
                         runningCampaigns.stream()
@@ -179,6 +214,4 @@ public class DashboardService {
                 matchedActionLogs
         );
     }
-
-
 }

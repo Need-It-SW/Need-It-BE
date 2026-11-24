@@ -51,6 +51,29 @@ public class UserActionLog {
     @Column(name = "category", length = 30)
     private RequestCategory category;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "filter_result", length = 20)
+    private UserActionFilterResult filterResult;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "filter_reason", length = 50)
+    private UserActionFilterReason filterReason;
+
+    @Column(name = "sanction_id")
+    private Long sanctionId;
+
+    @Column(name = "filtered_at")
+    private LocalDateTime filteredAt;public void applyFilter(
+            UserActionFilterResult result,
+            UserActionFilterReason reason,
+            Long sanctionId
+    ) {
+        this.filterResult = result;
+        this.filterReason = reason;
+        this.sanctionId = sanctionId;
+        this.filteredAt = LocalDateTime.now();
+    }
+
     // 생성 시간
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -89,4 +112,7 @@ public class UserActionLog {
         this.category = category;
         this.createdAt = LocalDateTime.now();
     }
+
+
+
 }

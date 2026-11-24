@@ -47,12 +47,14 @@ public enum ErrorCode {
     REQUEST_HAS_OFFERS(HttpStatus.CONFLICT, "REQUEST_HAS_OFFERS", "나눔 제안이 존재하는 게시글은 삭제할 수 없습니다."),
 
     //제안 오류
+    OFFER_REGION_MISMATCH(HttpStatus.FORBIDDEN, "OFFER_403_3", "같은 시·군(특별시·광역시는 같은 구·군)의 요청글에만 나눔을 제안할 수 있습니다."),
     OFFER_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "OFFER_400_1", "본인의 요청 게시글에는 제안할 수 없습니다."),
     OFFER_REQUEST_CLOSED(HttpStatus.BAD_REQUEST, "OFFER_400_2", "마감된 요청 게시글에는 제안할 수 없습니다."),
     OFFER_NOT_FOUND(HttpStatus.NOT_FOUND, "OFFER_001", "제안을 찾을 수 없습니다."),
     OFFER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "OFFER_002", "제안을 처리할 권한이 없습니다."),
     OFFER_ALREADY_PROCESSED(HttpStatus.BAD_REQUEST, "OFFER_003", "이미 처리된 제안입니다."),
     OFFER_ALREADY_ACCEPTED(HttpStatus.CONFLICT, "OFFER_004", "이미 수락된 제안이 존재합니다."),
+    OFFER_DUPLICATE(HttpStatus.CONFLICT, "OFFER_007", "이미 이 요청글에 제안했습니다."),
     OFFER_NOT_ACCEPTED(HttpStatus.BAD_REQUEST, "OFFER_005", "수락된 제안만 거래 완료할 수 있습니다."),
     OFFER_ALREADY_COMPLETED(HttpStatus.CONFLICT, "OFFER_006", "이미 완료된 거래입니다."),
 

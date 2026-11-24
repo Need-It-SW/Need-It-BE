@@ -1,6 +1,7 @@
 package com.needitbe.domain.useraction.service;
 
 import com.needitbe.domain.admin.dto.AdminUserActionStatisticsResponse;
+import com.needitbe.domain.admin.repository.MemberSanctionRepository;
 import com.needitbe.domain.campaign.entity.AdCampaign;
 import com.needitbe.domain.campaign.entity.AdType;
 import com.needitbe.domain.campaign.entity.CampaignStatus;
@@ -30,15 +31,23 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.needitbe.domain.admin.entity.MemberSanction;
+import com.needitbe.domain.useraction.entity.UserActionFilterResult;
+import com.needitbe.domain.useraction.entity.UserActionFilterReason;
+
+import com.needitbe.domain.useraction.dto.AdminUserActionFilterStatisticsResponse;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AdminUserActionService {
 
+
     private final UserActionLogRepository userActionLogRepository;
     private final MemberRepository memberRepository;
     private final AdCampaignRepository adCampaignRepository;
+    private final MemberSanctionRepository memberSanctionRepository;
 
     public Page<AdminUserActionResponse> getLogs(
             String action,
@@ -47,6 +56,9 @@ public class AdminUserActionService {
             String search,
             LocalDate startDate,
             LocalDate endDate,
+            Long memberId,
+            UserActionFilterResult filterResult,
+            UserActionFilterReason filterReason,
             Pageable pageable
     ) {
 
@@ -85,10 +97,13 @@ public class AdminUserActionService {
                         startDateTime,
                         endDateTime,
                         normalizedSearch,
+                        memberId,
+                        filterResult,
+                        filterReason,
                         pageable
                 );
 
-        // 2. 해당 페이지 회원 ID 수집
+        // 2. 회원 ID 수집
         Set<Long> memberIds = logs.getContent()
                 .stream()
                 .map(UserActionLog::getMemberId)
@@ -104,13 +119,29 @@ public class AdminUserActionService {
                                 Function.identity()
                         ));
 
-        // 4. 현재 진행 중인 개인화 캠페인 조회
+        // 4. 제재 ID 수집
+        Set<Long> sanctionIds = logs.getContent()
+                .stream()
+                .map(UserActionLog::getSanctionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 5. 제재 정보 일괄 조회
+        Map<Long, MemberSanction> sanctionMap =
+                memberSanctionRepository.findAllById(sanctionIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                MemberSanction::getId,
+                                Function.identity()
+                        ));
+
+        // 6. 현재 진행 중인 개인화 캠페인 조회
         List<AdCampaign> campaigns =
                 adCampaignRepository.findRunningCampaignsByAdType(
                         AdType.PERSONALIZED
                 );
 
-        // 5. 로그별 매칭 캠페인 계산
+        // 7. 로그별 응답 생성
         return logs.map(log -> {
 
             Member member = memberMap.get(log.getMemberId());
@@ -118,23 +149,41 @@ public class AdminUserActionService {
             String region =
                     member == null ? null : member.getRegion();
 
-            List<MatchedCampaignResponse> matchedCampaigns =
-                    campaigns.stream()
-                            .filter(campaign ->
-                                    matchesCampaign(log, region, campaign)
-                            )
-                            .map(campaign ->
-                                    new MatchedCampaignResponse(
-                                            campaign.getId(),
-                                            campaign.getName()
-                                    )
-                            )
-                            .toList();
+            // 제재 정보 조회
+            MemberSanction sanction =
+                    sanctionMap.get(log.getSanctionId());
+
+            String sanctionReason =
+                    sanction == null ? null : sanction.getReason();
+
+            // 필터링된 행동은 캠페인 매칭에서 제외
+            List<MatchedCampaignResponse> matchedCampaigns;
+
+            if (log.getFilterResult() != UserActionFilterResult.INCLUDED) {
+
+                matchedCampaigns = List.of();
+
+            } else {
+
+                matchedCampaigns =
+                        campaigns.stream()
+                                .filter(campaign ->
+                                        matchesCampaign(log, region, campaign)
+                                )
+                                .map(campaign ->
+                                        new MatchedCampaignResponse(
+                                                campaign.getId(),
+                                                campaign.getName()
+                                        )
+                                )
+                                .toList();
+            }
 
             return AdminUserActionResponse.from(
                     log,
                     region,
-                    matchedCampaigns
+                    matchedCampaigns,
+                    sanctionReason
             );
         });
     }
@@ -339,6 +388,67 @@ public class AdminUserActionService {
         return new AdminUserActionStatisticsResponse(
                 totalCount,
                 counts
+        );
+    }
+
+    public AdminUserActionFilterStatisticsResponse getFilterStatistics() {
+
+        long totalCount = userActionLogRepository.count();
+
+        long includedCount = 0;
+        long excludedCount = 0;
+
+        List<Object[]> resultCounts =
+                userActionLogRepository.countByFilterResult();
+
+        for (Object[] row : resultCounts) {
+
+            UserActionFilterResult result =
+                    (UserActionFilterResult) row[0];
+
+            long count = ((Number) row[1]).longValue();
+
+            if (result == UserActionFilterResult.INCLUDED) {
+                includedCount = count;
+            } else if (result == UserActionFilterResult.EXCLUDED) {
+                excludedCount = count;
+            }
+        }
+
+        Map<String, Long> reasonCounts = new LinkedHashMap<>();
+
+        List<Object[]> reasons =
+                userActionLogRepository.countByFilterReason(
+                        UserActionFilterResult.EXCLUDED
+                );
+
+        for (Object[] row : reasons) {
+
+            String reason = row[0] == null
+                    ? "UNKNOWN"
+                    : row[0].toString();
+
+            long count = ((Number) row[1]).longValue();
+
+            reasonCounts.put(reason, count);
+        }
+
+        long unclassifiedCount =
+                totalCount - includedCount - excludedCount;
+
+        double exclusionRate = totalCount == 0
+                ? 0.0
+                : Math.round(
+                (excludedCount * 10000.0 / totalCount)
+        ) / 100.0;
+
+        return new AdminUserActionFilterStatisticsResponse(
+                totalCount,
+                includedCount,
+                excludedCount,
+                unclassifiedCount,
+                exclusionRate,
+                reasonCounts
         );
     }
 }

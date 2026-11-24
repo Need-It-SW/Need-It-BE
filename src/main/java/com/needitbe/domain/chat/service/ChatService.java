@@ -184,6 +184,7 @@ public class ChatService {
                 request.content()
         );
 
+        boolean firstMessageInRoom = chatMessageRepository.countByChatRoomId(chatRoomId) == 0;
         ChatMessage savedMessage =
                 chatMessageRepository.saveAndFlush(message);
 
@@ -198,12 +199,14 @@ public class ChatService {
         );
 
 // 2. 알림 DB 저장
-        notificationService.createNotification(
-                receiverId,
-                NotificationType.CHAT_MESSAGE,
-                "새로운 채팅 메시지가 도착했어요.",
-                chatRoomId
-        );
+        if (firstMessageInRoom) {
+            notificationService.createNotification(
+                    receiverId,
+                    NotificationType.CHAT_MESSAGE,
+                    "새로운 채팅 메시지가 도착했어요.",
+                    chatRoomId
+            );
+        }
 
 // 3. 기존 메시지 응답 반환
         return ChatMessageResponse.from(savedMessage);
@@ -287,6 +290,8 @@ public class ChatService {
 
         try {
 
+            boolean firstMessageInRoom = chatMessageRepository.countByChatRoomId(chatRoomId) == 0;
+
             // 6. 이미지 메시지 생성
             ChatMessage message = new ChatMessage(
                     chatRoom,
@@ -313,12 +318,14 @@ public class ChatService {
                     memberId
             );
 
-            notificationService.createNotification(
-                    receiverId,
-                    NotificationType.CHAT_MESSAGE,
-                    "새로운 채팅 이미지가 도착했어요.",
-                    chatRoomId
-            );
+            if (firstMessageInRoom) {
+                notificationService.createNotification(
+                        receiverId,
+                        NotificationType.CHAT_MESSAGE,
+                        "새로운 채팅 이미지가 도착했어요.",
+                        chatRoomId
+                );
+            }
 
 // ==========================================
 // 10. 기존 WebSocket 이벤트 발행

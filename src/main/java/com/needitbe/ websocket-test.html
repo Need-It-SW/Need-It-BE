@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>NEED IT WebSocket 테스트</title>
+</head>
+<body>
+
+<h2>NEED IT 관리자 WebSocket 테스트</h2>
+
+<input
+        type="text"
+        id="token"
+        placeholder="관리자 Access Token 입력"
+        style="width: 500px;"
+>
+
+<button onclick="connect()">연결</button>
+<button onclick="disconnect()">연결 해제</button>
+
+<h3>수신 메시지</h3>
+<pre id="output"></pre>
+
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+
+<script>
+    let client = null;
+
+    function print(message) {
+        document.getElementById("output").textContent +=
+            message + "\n";
+    }
+
+    function connect() {
+
+        const token = document.getElementById("token")
+            .value.trim()
+            .replace(/^Bearer\s+/i, "");
+
+        if (!token) {
+            alert("관리자 Access Token을 입력하세요.");
+            return;
+        }
+
+        client = new StompJs.Client({
+            brokerURL: "ws://localhost:8080/ws",
+
+            connectHeaders: {
+                Authorization: "Bearer " + token
+            },
+
+            reconnectDelay: 5000,
+
+            onConnect: () => {
+
+                print("✅ WebSocket 연결 성공");
+
+                client.subscribe(
+                    "/topic/admin/user-actions",
+                    (message) => {
+
+                        const event = JSON.parse(message.body);
+
+                        print(
+                            "📩 수신: " +
+                            JSON.stringify(event, null, 2)
+                        );
+                    }
+                );
+
+                print("✅ 관리자 행동 로그 구독 요청");
+            },
+
+            onStompError: (frame) => {
+                print("❌ STOMP 오류: " + frame.headers.message);
+            },
+
+            onWebSocketError: (error) => {
+                print("❌ WebSocket 연결 오류");
+                console.error(error);
+            }
+        });
+
+        client.activate();
+    }
+
+    function disconnect() {
+        if (client) {
+            client.deactivate();
+            print("WebSocket 연결 해제");
+        }
+    }
+</script>
+
+</body>
+</html>

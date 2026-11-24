@@ -29,6 +29,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -43,6 +44,8 @@ import com.needitbe.domain.useraction.kafka.UserActionProducer;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
+import java.util.HashMap;
+import com.needitbe.domain.offer.entity.OfferStatus;
 import java.util.UUID;
 
 @Slf4j
@@ -51,6 +54,7 @@ import java.util.UUID;
 public class RequestService {
 
 
+    private final SimpMessagingTemplate messagingTemplate;
     private final UserActionProducer userActionProducer;
     private final ObjectMapper objectMapper;
     private final FavoriteRepository favoriteRepository;
@@ -92,6 +96,29 @@ public class RequestService {
                 savedRequest.getCategory()
         );
 
+        // Publish only after the new request is visible to other database readers.
+        Long newRequestId = savedRequest.getId();
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            Map<String, Object> payload = Map.of(
+                                    "type", "REQUEST_CREATED",
+                                    "requestId", newRequestId
+                            );
+
+                            messagingTemplate.convertAndSend(
+                                    "/topic/requests",
+                                    (Object) payload
+                            );
+                        } catch (Exception ex) {
+                            log.warn("요청글 실시간 알림 전송 실패: {}", newRequestId, ex);
+                        }
+                    }
+                }
+        );
+
         return toResponse(savedRequest);
     }
 
@@ -122,6 +149,7 @@ public class RequestService {
         // 필터 조건
         Specification<ItemRequest> specification =
                 Specification.allOf(
+                        ItemRequestSpecification.isNotDeleted(),
                         ItemRequestSpecification.hasRegion(region),
                         ItemRequestSpecification.hasCategory(category),
                         ItemRequestSpecification.hasStatus(status),
@@ -133,7 +161,7 @@ public class RequestService {
                 itemRequestRepository.findAll(specification, pageable);
 
         // 비로그인 사용자는 isFavorite = false
-        return requests.map(this::toResponse);
+        return mapRequestsWithTradeStatus(requests, null);
     }
 
     // =====================================================
@@ -164,6 +192,7 @@ public class RequestService {
         // 필터 조건
         Specification<ItemRequest> specification =
                 Specification.allOf(
+                        ItemRequestSpecification.isNotDeleted(),
                         ItemRequestSpecification.hasRegion(region),
                         ItemRequestSpecification.hasCategory(category),
                         ItemRequestSpecification.hasStatus(status),
@@ -191,20 +220,16 @@ public class RequestService {
         );
 
         // 관심 여부를 포함한 DTO 반환
-        return requests.map(request -> {
-
-            boolean isFavorite =
-                    favoriteIds.contains(request.getId());
-
-            return toResponse(request, isFavorite);
-        });
+        return mapRequestsWithTradeStatus(requests, favoriteIds);
     }
 
     // =====================================================
     // 4. 요청 게시글 상세 조회 (비로그인)
     // =====================================================
-    @Transactional(readOnly = true)
+    @Transactional
     public RequestResponse getRequest(Long requestId) {
+        itemRequestRepository.incrementViewCount(requestId);
+
 
         ItemRequest itemRequest = itemRequestRepository.findById(requestId)
                 .orElseThrow(() ->
@@ -220,7 +245,7 @@ public class RequestService {
 
 // =====================================================
 
-    @Transactional(readOnly = true)
+    @Transactional
 
     public RequestResponse getRequest(
 
@@ -229,6 +254,8 @@ public class RequestService {
             Long requestId
 
     ) {
+        itemRequestRepository.incrementViewCount(requestId);
+
 
         // 1. 게시글 조회
 
@@ -298,81 +325,40 @@ public class RequestService {
     }
 
     // =====================================================
-    // 7. 요청 게시글 삭제
-    // =====================================================
+// 7. 요청 게시글 삭제
+// =====================================================
     @Transactional
     public void deleteRequest(
             Long memberId,
             Long requestId
     ) {
 
-        // 게시글 조회 및 잠금
+        // 1. 게시글 조회 및 잠금
         ItemRequest itemRequest =
                 itemRequestRepository.findByIdForUpdate(requestId)
                         .orElseThrow(() ->
                                 new CustomException(ErrorCode.REQUEST_NOT_FOUND)
                         );
 
-        // 작성자 확인
+        // 2. 작성자 확인
         if (!itemRequest.getMember().getId().equals(memberId)) {
             throw new CustomException(ErrorCode.REQUEST_ACCESS_DENIED);
         }
 
-        // 제안 존재 여부 확인
-        boolean hasOffers =
-                offerRepository.existsByItemRequestId(requestId);
-
-        // 제안이 하나라도 있으면 삭제 불가능
-        if (hasOffers) {
-            throw new CustomException(
-                    ErrorCode.REQUEST_HAS_OFFERS
-            );
+        // 3. 이미 삭제된 게시글인지 확인
+        if (itemRequest.isDeleted()) {
+            throw new CustomException(ErrorCode.REQUEST_NOT_FOUND);
         }
 
-        // 삭제할 S3 이미지 키 목록 확보
-        List<String> imageKeys = itemRequest.getImages()
-                .stream()
-                .map(ItemRequestImage::getImageKey)
-                .toList();
-
-        // 연결된 관심 게시글 데이터 삭제
-        favoriteRepository.deleteByItemRequestId(requestId);
-
-        // 게시글 및 이미지 DB 삭제
-        itemRequestRepository.delete(itemRequest);
-
-        // DB 커밋 성공 후 S3 이미지 삭제
-        if (!imageKeys.isEmpty()) {
-
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-
-                        @Override
-                        public void afterCommit() {
-
-                            for (String imageKey : imageKeys) {
-                                try {
-
-                                    s3Service.deleteImage(imageKey);
-
-                                    log.info(
-                                            "S3 이미지 삭제 성공. imageKey={}",
-                                            imageKey
-                                    );
-
-                                } catch (Exception e) {
-
-                                    log.error(
-                                            "S3 이미지 삭제 실패. imageKey={}",
-                                            imageKey,
-                                            e
-                                    );
-                                }
-                            }
-                        }
-                    }
-            );
+        // 진행 중인 요청에 제안이 있으면 먼저 요청을 마감하도록 안내한다.
+        // 마감된 요청은 제안/채팅/후기를 보존하면서 목록에서 숨긴다.
+        boolean hasOffers = offerRepository.existsByItemRequestId(requestId);
+        if (hasOffers && itemRequest.getStatus() != RequestStatus.CLOSED) {
+            throw new CustomException(ErrorCode.REQUEST_HAS_OFFERS);
         }
+
+        itemRequest.softDelete();
+        log.info("요청 게시글 소프트 삭제 - requestId: {}", requestId);
     }
 
     // =====================================================
@@ -438,7 +424,7 @@ public class RequestService {
         );
 
         Page<ItemRequest> requests =
-                itemRequestRepository.findByMemberId(
+                itemRequestRepository.findByMemberIdAndDeletedFalse(
                         memberId,
                         pageable
                 );
@@ -620,8 +606,43 @@ public class RequestService {
         return RequestResponse.from(
                 request,
                 images,
-                isFavorite
+                isFavorite,
+                resolveTradeStatus(request.getId(), request.getStatus())
         );
+    }
+
+    // 목록에서 제안 상태를 한 번에 조회하여 N+1 쿼리를 방지합니다.
+    private Page<RequestResponse> mapRequestsWithTradeStatus(Page<ItemRequest> page, Set<Long> favoriteIds) {
+        List<Long> ids = page.getContent().stream().map(ItemRequest::getId).toList();
+        Map<Long, String> states = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : offerRepository.findStatusesByRequestIds(
+                    ids, List.of(OfferStatus.COMPLETED, OfferStatus.ACCEPTED))) {
+                Long id = (Long) row[0];
+                OfferStatus status = (OfferStatus) row[1];
+                if (status == OfferStatus.COMPLETED) states.put(id, "COMPLETED");
+                else states.putIfAbsent(id, "IN_PROGRESS");
+            }
+        }
+        return page.map(request -> {
+            String tradeStatus = states.getOrDefault(request.getId(),
+                    request.getStatus() == RequestStatus.CLOSED ? "CLOSED" : "OPEN");
+            boolean isFavorite = favoriteIds != null && favoriteIds.contains(request.getId());
+            return toResponseWithTradeStatus(request, isFavorite, tradeStatus);
+        });
+    }
+
+    private String resolveTradeStatus(Long requestId, RequestStatus status) {
+        if (offerRepository.existsByItemRequestIdAndStatus(requestId, OfferStatus.COMPLETED)) return "COMPLETED";
+        if (offerRepository.existsByItemRequestIdAndStatus(requestId, OfferStatus.ACCEPTED)) return "IN_PROGRESS";
+        return status == RequestStatus.CLOSED ? "CLOSED" : "OPEN";
+    }
+
+    private RequestResponse toResponseWithTradeStatus(ItemRequest request, boolean isFavorite, String tradeStatus) {
+        List<RequestImageResponse> images = request.getImages().stream()
+                .map(image -> RequestImageResponse.from(image, s3Service.getPresignedUrl(image.getImageKey())))
+                .toList();
+        return RequestResponse.from(request, images, isFavorite, tradeStatus);
     }
 
     // =====================================================

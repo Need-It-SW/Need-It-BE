@@ -22,6 +22,14 @@ public class MemberController {
 
     private final MemberService memberService;
 
+    // 다른 이웃의 공개 프로필 (개인정보 제외)
+    @GetMapping("/{memberId}/public-profile")
+    public ResponseEntity<ApiResponse<com.needitbe.domain.member.dto.MemberPublicProfileResponse>> getPublicProfile(
+            @PathVariable Long memberId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "이웃 프로필 조회에 성공했습니다.", memberService.getPublicProfile(memberId)));
+    }
+
     // 내 정보 조회
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<MemberResponse>> getMyInfo(

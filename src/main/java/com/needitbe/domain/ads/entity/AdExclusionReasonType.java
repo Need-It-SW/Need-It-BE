@@ -17,6 +17,9 @@ public enum AdExclusionReasonType {
     // 최대 광고 노출 횟수 초과
     FATIGUE,
 
+    // 제재 회원으로 인한 광고 제외
+    MEMBER_SUSPENDED,
+
     // 기타 제외 사유
     OTHER
 }

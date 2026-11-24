@@ -1,8 +1,10 @@
 package com.needitbe.domain.useraction.kafka;
 
 import com.needitbe.domain.request.entity.RequestCategory;
+import com.needitbe.domain.useraction.dto.UserActionFilterDecision;
 import com.needitbe.domain.useraction.entity.UserActionLog;
 import com.needitbe.domain.useraction.repository.UserActionLogRepository;
+import com.needitbe.domain.useraction.service.UserActionFilterService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,16 +16,24 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.needitbe.domain.useraction.websocket.UserActionWebSocketPublisher;
+
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 
 import java.util.UUID;
+
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class UserActionConsumer {
 
+    private final UserActionWebSocketPublisher userActionWebSocketPublisher;
     private final ObjectMapper objectMapper;
     private final UserActionLogRepository userActionLogRepository;
+    private final UserActionFilterService userActionFilterService;
 
     @KafkaListener(
             topics = "needit-user-actions",
@@ -53,13 +63,16 @@ public class UserActionConsumer {
             try {
                 UUID.fromString(eventId);
             } catch (IllegalArgumentException e) {
-                log.warn("잘못된 eventId 형식");
+                log.warn("잘못된 eventId 형식: {}", eventId);
                 return;
             }
 
             // 2. 중복 이벤트 확인
             if (userActionLogRepository.existsByEventId(eventId)) {
-                log.info("이미 처리한 Kafka 이벤트 - eventId: {}", eventId);
+                log.info(
+                        "이미 처리한 Kafka 이벤트 - eventId: {}",
+                        eventId
+                );
                 return;
             }
 
@@ -112,7 +125,7 @@ public class UserActionConsumer {
                     return;
                 }
 
-                userActionLogRepository.save(
+                saveActionLog(
                         new UserActionLog(
                                 eventId,
                                 memberId,
@@ -130,7 +143,7 @@ public class UserActionConsumer {
                 return;
             }
 
-            // CATEGORY_CLICK 처리
+            // 6. CATEGORY_CLICK 처리
             if ("CATEGORY_CLICK".equals(action)) {
 
                 if (memberId == null) {
@@ -152,11 +165,14 @@ public class UserActionConsumer {
                             categoryNode.asText()
                     );
                 } catch (IllegalArgumentException e) {
-                    log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                    log.warn(
+                            "지원하지 않는 카테고리: {}",
+                            categoryNode.asText()
+                    );
                     return;
                 }
 
-                userActionLogRepository.save(
+                saveActionLog(
                         new UserActionLog(
                                 eventId,
                                 memberId,
@@ -176,7 +192,7 @@ public class UserActionConsumer {
                 return;
             }
 
-            // REQUEST_CREATE 처리
+            // 7. REQUEST_CREATE 처리
             if ("REQUEST_CREATE".equals(action)) {
 
                 if (memberId == null) {
@@ -217,12 +233,14 @@ public class UserActionConsumer {
                             categoryNode.asText()
                     );
                 } catch (IllegalArgumentException e) {
-                    log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                    log.warn(
+                            "지원하지 않는 카테고리: {}",
+                            categoryNode.asText()
+                    );
                     return;
                 }
 
-                // 행동 로그 저장
-                userActionLogRepository.save(
+                saveActionLog(
                         new UserActionLog(
                                 eventId,
                                 memberId,
@@ -243,12 +261,15 @@ public class UserActionConsumer {
                 return;
             }
 
-            // 6. VIEW / FAVORITE / OFFER 처리
+            // 8. VIEW / FAVORITE / OFFER 처리
             if (!"VIEW".equals(action)
                     && !"FAVORITE".equals(action)
                     && !"OFFER".equals(action)) {
 
-                log.warn("지원하지 않는 행동 유형: {}", action);
+                log.warn(
+                        "지원하지 않는 행동 유형: {}",
+                        action
+                );
                 return;
             }
 
@@ -258,7 +279,7 @@ public class UserActionConsumer {
                 return;
             }
 
-            // 7. 게시글 ID 추출
+            // 9. 게시글 ID 추출
             JsonNode requestIdNode = json.get("requestId");
 
             if (requestIdNode == null
@@ -276,7 +297,7 @@ public class UserActionConsumer {
                 return;
             }
 
-            // 8. 카테고리 추출
+            // 10. 카테고리 추출
             JsonNode categoryNode = json.get("category");
 
             if (categoryNode == null || !categoryNode.isTextual()) {
@@ -291,12 +312,15 @@ public class UserActionConsumer {
                         categoryNode.asText()
                 );
             } catch (IllegalArgumentException e) {
-                log.warn("지원하지 않는 카테고리: {}", categoryNode.asText());
+                log.warn(
+                        "지원하지 않는 카테고리: {}",
+                        categoryNode.asText()
+                );
                 return;
             }
 
-            // 9. 행동 로그 저장
-            userActionLogRepository.save(
+            // 11. VIEW / FAVORITE / OFFER 로그 저장
+            saveActionLog(
                     new UserActionLog(
                             eventId,
                             memberId,
@@ -318,5 +342,68 @@ public class UserActionConsumer {
         } catch (JacksonException e) {
             log.warn("Kafka JSON 파싱 실패", e);
         }
+    }
+
+    /**
+     * 사용자 행동 로그 저장 및 회원 제재 필터링
+     *
+     * INCLUDED : 개인화 분석 반영
+     * EXCLUDED : 개인화 분석 제외
+     *
+     * EXCLUDED 상태여도 원본 행동 로그는 저장한다.
+     */
+    private void saveActionLog(UserActionLog actionLog) {
+
+        // 1. 회원 제재 상태 확인
+        UserActionFilterDecision decision =
+                userActionFilterService.evaluate(
+                        actionLog.getMemberId()
+                );
+
+        // 2. 필터링 결과 적용
+        actionLog.applyFilter(
+                decision.result(),
+                decision.reason(),
+                decision.sanctionId()
+        );
+
+        // 3. 행동 로그 및 필터링 결과 저장
+        UserActionLog savedLog =
+                userActionLogRepository.save(actionLog);
+
+        Long savedLogId = savedLog.getId();
+
+        // 4. DB 트랜잭션 커밋 후 WebSocket 알림 전송
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        try {
+                            userActionWebSocketPublisher.publishCreated(
+                                    savedLogId
+                            );
+                        } catch (Exception e) {
+                            log.error(
+                                    "관리자 행동 로그 WebSocket 알림 실패 - logId: {}",
+                                    savedLogId,
+                                    e
+                            );
+                        }
+                    }
+                }
+        );
+
+        // 5. 처리 결과 로깅
+        log.info(
+                "Kafka 행동 필터링 완료 - eventId: {}, memberId: {}, action: {}, result: {}, reason: {}, sanctionId: {}",
+                actionLog.getEventId(),
+                actionLog.getMemberId(),
+                actionLog.getAction(),
+                decision.result(),
+                decision.reason(),
+                decision.sanctionId()
+        );
     }
 }

@@ -7,6 +7,10 @@ import org.springframework.data.jpa.domain.Specification;
 
 public class ItemRequestSpecification {
 
+    public static Specification<ItemRequest> notDeleted() {
+        return (root, query, cb) -> cb.isFalse(root.get("deleted"));
+    }
+
     // 지역 필터
     public static Specification<ItemRequest> hasRegion(String region) {
 
@@ -93,5 +97,10 @@ public class ItemRequestSpecification {
                     descriptionPredicate
             );
         };
+    }
+
+    public static Specification<ItemRequest> isNotDeleted() {
+        return (root, query, cb) ->
+                cb.isFalse(root.get("deleted"));
     }
 }

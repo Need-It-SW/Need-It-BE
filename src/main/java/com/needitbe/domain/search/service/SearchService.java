@@ -6,6 +6,7 @@ import com.needitbe.domain.search.repository.SearchLogRepository;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Service;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ public class SearchService {
 
     private final SearchLogRepository searchLogRepository;
     private final UserActionProducer userActionProducer;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // =====================================================
     // 1. 검색 기록 저장
@@ -81,10 +83,18 @@ public class SearchService {
 
                     @Override
                     public void afterCommit() {
-                        userActionProducer.send(
-                                userId,
-                                message
-                        );
+                        try {
+                            userActionProducer.send(userId, message);
+                        } catch (Exception ex) {
+                            org.slf4j.LoggerFactory.getLogger(SearchService.class)
+                                    .warn("검색 행동 Kafka 발행 실패", ex);
+                        }
+                        try {
+                            messagingTemplate.convertAndSend("/topic/searches/popular", "UPDATED");
+                        } catch (Exception ex) {
+                            org.slf4j.LoggerFactory.getLogger(SearchService.class)
+                                    .warn("인기 검색어 실시간 알림 전송 실패", ex);
+                        }
                     }
                 }
         );

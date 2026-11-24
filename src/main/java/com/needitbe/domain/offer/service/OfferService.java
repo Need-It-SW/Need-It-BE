@@ -23,6 +23,7 @@ import com.needitbe.global.exception.ErrorCode;
 import com.needitbe.global.s3.S3Service;
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -59,6 +60,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class OfferService {
+    private final SimpMessagingTemplate messagingTemplate;
     private final BlockRepository blockRepository;
     private final OfferAcceptanceCancellationRepository cancellationRepository;
     private final OfferRepository offerRepository;
@@ -126,6 +128,24 @@ public class OfferService {
                         new CustomException(ErrorCode.MEMBER_NOT_FOUND)
                 );
 
+        // 전국 게시글 조회는 허용하되, 나눔 제안은 동일 거래권역에서만 허용.
+        // 도 지역: 같은 시·군 / 특별시·광역시: 같은 구·군.
+        if (!TradeRegionPolicy.canOffer(member.getRegion(), itemRequest.getRegion())) {
+            throw new CustomException(ErrorCode.OFFER_REGION_MISMATCH);
+        }
+
+        // 이미 수락된 제안이 있으면 추가 제안 자체를 차단한다.
+        // 요청글 행을 잠근 상태에서 확인하므로 동시 요청도 직렬화된다.
+        if (offerRepository.existsByItemRequestIdAndStatus(
+                requestId, OfferStatus.ACCEPTED)) {
+            throw new CustomException(ErrorCode.OFFER_ALREADY_ACCEPTED);
+        }
+
+        // 동일 사용자가 같은 요청글에 여러 번 제안하지 못하도록 차단한다.
+        if (offerRepository.existsByItemRequestIdAndMemberId(requestId, memberId)) {
+            throw new CustomException(ErrorCode.OFFER_DUPLICATE);
+        }
+
         // 5. Offer 엔티티 생성
         Offer offer = new Offer(
                 itemRequest,
@@ -161,6 +181,12 @@ public class OfferService {
                 memberId,
                 requestId,
                 category
+        );
+
+        // 나눔 제안 등록 후 요청글 실시간 갱신
+        publishRequestUpdateEvent(
+                requestId,
+                "OFFER_CREATED"
         );
 
         // ==========================================
@@ -730,5 +756,56 @@ public class OfferService {
             }
         }
 
+    // =====================================================
+// 요청 게시글 실시간 갱신 이벤트
+// =====================================================
+    private void publishRequestUpdateEvent(
+            Long requestId,
+            String eventType
+    ) {
 
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.warn(
+                    "WebSocket 이벤트 발행 예약 실패 - requestId: {}",
+                    requestId
+            );
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCommit() {
+
+                        try {
+
+                            Map<String, Object> payload = Map.of(
+                                    "type", eventType,
+                                    "requestId", requestId
+                            );
+
+                            messagingTemplate.convertAndSend(
+                                    "/topic/requests",
+                                    (Object) payload
+                            );
+
+                            log.info(
+                                    "요청글 실시간 갱신 이벤트 발행 - type: {}, requestId: {}",
+                                    eventType,
+                                    requestId
+                            );
+
+                        } catch (Exception e) {
+
+                            log.error(
+                                    "요청글 실시간 갱신 이벤트 발행 실패 - requestId: {}",
+                                    requestId,
+                                    e
+                            );
+                        }
+                    }
+                }
+        );
+    }
 }

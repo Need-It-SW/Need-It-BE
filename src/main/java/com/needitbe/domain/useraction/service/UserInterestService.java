@@ -1,6 +1,8 @@
 package com.needitbe.domain.useraction.service;
 
 import com.needitbe.domain.request.entity.RequestCategory;
+import com.needitbe.domain.useraction.entity.UserActionFilterResult;
+import com.needitbe.domain.useraction.entity.UserActionLog;
 import com.needitbe.domain.useraction.repository.UserActionLogRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -9,13 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import com.needitbe.domain.useraction.entity.UserActionLog;
-
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -26,17 +25,19 @@ public class UserInterestService {
     private final UserActionLogRepository userActionLogRepository;
 
     // ==========================================
-    // 회원별 카테고리 관심도 계산
+    // 1. 회원별 카테고리 관심도 계산
     // ==========================================
     public Map<RequestCategory, Long> getCategoryInterestScores(
             Long memberId
     ) {
 
         List<Object[]> results =
-                userActionLogRepository.findCategoryInterestScores(memberId);
+                userActionLogRepository.findCategoryInterestScores(
+                        memberId,
+                        UserActionFilterResult.INCLUDED
+                );
 
-        Map<RequestCategory, Long> scores =
-                new LinkedHashMap<>();
+        Map<RequestCategory, Long> scores = new LinkedHashMap<>();
 
         for (Object[] row : results) {
 
@@ -53,7 +54,7 @@ public class UserInterestService {
     }
 
     // ==========================================
-    // 가장 관심도가 높은 카테고리 조회
+    // 2. 가장 관심도가 높은 카테고리 조회
     // ==========================================
     public RequestCategory getTopInterestCategory(
             Long memberId
@@ -72,15 +73,18 @@ public class UserInterestService {
     }
 
     // ==========================================
-// 회원별 최근 검색 키워드 조회
-// ==========================================
-    public Set<String> getRecentSearchKeywords(Long memberId) {
+    // 3. 회원별 최근 검색 키워드 조회
+    // ==========================================
+    public Set<String> getRecentSearchKeywords(
+            Long memberId
+    ) {
 
         List<UserActionLog> logs =
                 userActionLogRepository
-                        .findTop20ByMemberIdAndActionAndKeywordIsNotNullOrderByCreatedAtDescIdDesc(
+                        .findTop20ByMemberIdAndActionAndKeywordIsNotNullAndFilterResultOrderByCreatedAtDescIdDesc(
                                 memberId,
-                                "SEARCH"
+                                "SEARCH",
+                                UserActionFilterResult.INCLUDED
                         );
 
         Set<String> keywords = new LinkedHashSet<>();
@@ -101,12 +105,17 @@ public class UserInterestService {
         return keywords;
     }
 
-    // 회원별 최근 행동 로그 조회
-    public List<UserActionLog> getRecentActions(Long memberId) {
+    // ==========================================
+    // 4. 회원별 최근 행동 로그 조회
+    // ==========================================
+    public List<UserActionLog> getRecentActions(
+            Long memberId
+    ) {
 
         return userActionLogRepository
-                .findTop100ByMemberIdOrderByCreatedAtDescIdDesc(
-                        memberId
+                .findTop100ByMemberIdAndFilterResultOrderByCreatedAtDescIdDesc(
+                        memberId,
+                        UserActionFilterResult.INCLUDED
                 );
     }
 }

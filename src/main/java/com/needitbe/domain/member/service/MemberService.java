@@ -226,6 +226,17 @@ public class MemberService {
         return toResponse(member);
     }
 
+    @Transactional(readOnly = true)
+    public com.needitbe.domain.member.dto.MemberPublicProfileResponse getPublicProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new com.needitbe.global.exception.CustomException(
+                        com.needitbe.global.exception.ErrorCode.MEMBER_NOT_FOUND));
+        String imageUrl = member.getProfileImageKey() == null ? null
+                : s3Service.getPresignedUrl(member.getProfileImageKey());
+        return new com.needitbe.domain.member.dto.MemberPublicProfileResponse(
+                member.getId(), member.getNickname(), imageUrl);
+    }
+
     // 회원 응답 변환
     private MemberResponse toResponse(Member member) {
 

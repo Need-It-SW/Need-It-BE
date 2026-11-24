@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
@@ -15,7 +16,13 @@ import java.util.Optional;
 public interface ItemRequestRepository
         extends JpaRepository<ItemRequest, Long>,
         JpaSpecificationExecutor<ItemRequest> {
-    Page<ItemRequest> findByMemberId(
+    Optional<ItemRequest> findByIdAndDeletedFalse(Long id);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE ItemRequest r SET r.viewCount = r.viewCount + 1 WHERE r.id = :id AND r.deleted = false")
+    int incrementViewCount(@Param("id") Long id);
+
+    Page<ItemRequest> findByMemberIdAndDeletedFalse(
             Long memberId,
             Pageable pageable
     );
