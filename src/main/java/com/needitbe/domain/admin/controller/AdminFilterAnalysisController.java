@@ -29,10 +29,20 @@ public class AdminFilterAnalysisController {
     // 1. 고객 필터링 요약 통계
     // ==========================================
 
+    @GetMapping("/evaluations")
+    public Page<java.util.Map<String, Object>> getEvaluations(
+            @RequestParam(defaultValue = "7D") String period,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) Long campaignId,
+            @RequestParam(required = false) com.needitbe.domain.ads.entity.AdFilterResult result,
+            @RequestParam(defaultValue = "10") int size) {
+        return filterAnalysisService.getEvaluations(period, campaignId, result, page, size);
+    }
+
     @GetMapping("/summary")
     public FilterAnalysisSummaryResponse getSummary(
 
-            @RequestParam Long campaignId,
+            @RequestParam(required = false) Long campaignId,
 
             @RequestParam(defaultValue = "7D")
             String period
@@ -52,7 +62,7 @@ public class AdminFilterAnalysisController {
     @GetMapping("/reasons")
     public List<FilterReasonResponse> getReasons(
 
-            @RequestParam Long campaignId,
+            @RequestParam(required = false) Long campaignId,
 
             @RequestParam(defaultValue = "7D")
             String period
@@ -68,7 +78,7 @@ public class AdminFilterAnalysisController {
     @GetMapping("/exclusions")
     public Page<FilterExclusionResponse> getExclusions(
 
-            @RequestParam Long campaignId,
+            @RequestParam(required = false) Long campaignId,
 
             @RequestParam(defaultValue = "7D")
             String period,
@@ -96,7 +106,7 @@ public class AdminFilterAnalysisController {
     @GetMapping("/ad-events")
     public Page<FilterAdEventResponse> getAdEvents(
 
-            @RequestParam Long campaignId,
+            @RequestParam(required = false) Long campaignId,
 
             @RequestParam(defaultValue = "7D")
             String period,

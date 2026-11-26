@@ -34,31 +34,41 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             Pageable pageable
     );
 
+    // 회원 신고는 targetId, 게시글 신고는 게시글 작성자 ID로 집계한다.
+    // 삭제(soft delete)된 게시글도 작성자가 남아 있으면 신고 이력에 포함한다.
     @Query(
             value = """
-        SELECT r.targetId AS memberId,
+        SELECT CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END AS memberId,
                COUNT(r) AS reportCount,
-               SUM(CASE WHEN r.status = :pending THEN 1 ELSE 0 END) AS pendingCount,
-               SUM(CASE WHEN r.status = :inReview THEN 1 ELSE 0 END) AS inReviewCount,
-               SUM(CASE WHEN r.status = :resolved THEN 1 ELSE 0 END) AS resolvedCount,
-               SUM(CASE WHEN r.status = :rejected THEN 1 ELSE 0 END) AS rejectedCount
+               SUM(CASE WHEN r.status = :pending THEN 1L ELSE 0L END) AS pendingCount,
+               SUM(CASE WHEN r.status = :inReview THEN 1L ELSE 0L END) AS inReviewCount,
+               SUM(CASE WHEN r.status = :resolved THEN 1L ELSE 0L END) AS resolvedCount,
+               SUM(CASE WHEN r.status = :rejected THEN 1L ELSE 0L END) AS rejectedCount
         FROM Report r
-        WHERE r.reportType = :memberType
-        GROUP BY r.targetId
-        ORDER BY COUNT(r) DESC, r.targetId ASC
+        LEFT JOIN ItemRequest ir ON r.reportType = :requestType AND ir.id = r.targetId
+        WHERE r.reportType = :memberType OR (r.reportType = :requestType AND ir.id IS NOT NULL)
+        GROUP BY CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END
+        ORDER BY COUNT(r) DESC, CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END ASC
         """,
             countQuery = """
-        SELECT COUNT(DISTINCT r.targetId)
+        SELECT COUNT(DISTINCT CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END)
         FROM Report r
-        WHERE r.reportType = :memberType
+        LEFT JOIN ItemRequest ir ON r.reportType = :requestType AND ir.id = r.targetId
+        WHERE r.reportType = :memberType OR (r.reportType = :requestType AND ir.id IS NOT NULL)
         """
     )
     Page<ReportedMemberProjection> findReportedMembers(
             @Param("memberType") ReportType memberType,
+            @Param("requestType") ReportType requestType,
             @Param("pending") ReportStatus pending,
             @Param("inReview") ReportStatus inReview,
             @Param("resolved") ReportStatus resolved,
             @Param("rejected") ReportStatus rejected,
             Pageable pageable
+    );
+
+    void deleteByReportTypeAndTargetId(
+            ReportType reportType,
+            Long targetId
     );
 }

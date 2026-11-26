@@ -30,11 +30,13 @@ public class WebSocketSessionEventLogger {
     public void handleDisconnected(SessionDisconnectEvent event) {
 
         log.info(
-                "WebSocket 세션 종료 - user={}, sessionId={}",
+                "WebSocket 세션 종료 - user={}, sessionId={}, closeCode={}, reason={}",
                 event.getUser() != null
                         ? event.getUser().getName()
                         : "null",
-                event.getSessionId()
+                event.getSessionId(),
+                event.getCloseStatus().getCode(),
+                event.getCloseStatus().getReason()
         );
     }
 }

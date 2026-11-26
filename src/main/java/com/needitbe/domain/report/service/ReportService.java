@@ -227,6 +227,7 @@ public class ReportService {
         Page<ReportedMemberProjection> reportedMembers =
                 reportRepository.findReportedMembers(
                         ReportType.MEMBER,
+                        ReportType.REQUEST,
                         ReportStatus.PENDING,
                         ReportStatus.IN_REVIEW,
                         ReportStatus.RESOLVED,
@@ -251,5 +252,24 @@ public class ReportService {
                     result.getRejectedCount()
             );
         });
+    }
+
+    /**
+     * 관리자 - 신고 대상 사용자 목록에서 제외
+     *
+     * 회원 자체를 삭제하지 않고,
+     * 해당 회원을 대상으로 접수된 신고 내역을 삭제한다.
+     */
+    @Transactional
+    public void dismissReportedMember(Long memberId) {
+
+        if (!memberRepository.existsById(memberId)) {
+            throw new CustomException(ErrorCode.MEMBER_NOT_FOUND);
+        }
+
+        reportRepository.deleteByReportTypeAndTargetId(
+                ReportType.MEMBER,
+                memberId
+        );
     }
 }

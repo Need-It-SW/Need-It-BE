@@ -13,6 +13,14 @@ import java.util.List;
 public interface AdFilterExclusionReasonRepository
         extends JpaRepository<AdFilterExclusionReason, Long> {
 
+    @Query("""
+        SELECT r.reason, COUNT(r) FROM AdFilterExclusionReason r
+        WHERE (:campaignId IS NULL OR r.evaluation.campaignId = :campaignId)
+          AND (:start IS NULL OR r.evaluation.createdAt >= :start)
+        GROUP BY r.reason ORDER BY COUNT(r) DESC
+        """)
+    List<Object[]> countReasons(@Param("campaignId") Long campaignId, @Param("start") LocalDateTime start);
+
     // 캠페인별 제외 사유 집계
     @Query("""
         SELECT r.reason, COUNT(r)

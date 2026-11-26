@@ -38,6 +38,7 @@ public class AdminFilterAnalysisService {
     private final AdFilterEvaluationRepository evaluationRepository;
     private final AdFilterExclusionReasonRepository exclusionReasonRepository;
     private final AdCampaignRepository adCampaignRepository;
+    private final com.needitbe.domain.member.repository.MemberRepository memberRepository;
 
     // ==========================================
     // 1. 고객 필터링 요약 통계
@@ -52,53 +53,9 @@ public class AdminFilterAnalysisService {
 
         LocalDateTime start = resolveStartDate(period);
 
-        long total;
-        long selected;
-        long excluded;
-
-        if (start == null) {
-
-            // 전체 기간
-            total = evaluationRepository.countByCampaignId(campaignId);
-
-            selected =
-                    evaluationRepository.countByCampaignIdAndResult(
-                            campaignId,
-                            AdFilterResult.SELECTED
-                    );
-
-            excluded =
-                    evaluationRepository.countByCampaignIdAndResult(
-                            campaignId,
-                            AdFilterResult.EXCLUDED
-                    );
-
-        } else {
-
-            // 특정 기간
-            total =
-                    evaluationRepository
-                            .countByCampaignIdAndCreatedAtGreaterThanEqual(
-                                    campaignId,
-                                    start
-                            );
-
-            selected =
-                    evaluationRepository
-                            .countByCampaignIdAndResultAndCreatedAtGreaterThanEqual(
-                                    campaignId,
-                                    AdFilterResult.SELECTED,
-                                    start
-                            );
-
-            excluded =
-                    evaluationRepository
-                            .countByCampaignIdAndResultAndCreatedAtGreaterThanEqual(
-                                    campaignId,
-                                    AdFilterResult.EXCLUDED,
-                                    start
-                            );
-        }
+        long total = evaluationRepository.countEvaluations(campaignId, start);
+        long selected = evaluationRepository.countEvaluationsByResult(campaignId, AdFilterResult.SELECTED, start);
+        long excluded = evaluationRepository.countEvaluationsByResult(campaignId, AdFilterResult.EXCLUDED, start);
 
         double selectionRate = total == 0
                 ? 0.0
@@ -126,23 +83,7 @@ public class AdminFilterAnalysisService {
 
         LocalDateTime start = resolveStartDate(period);
 
-        List<Object[]> results;
-
-        if (start == null) {
-
-            results =
-                    exclusionReasonRepository
-                            .countReasonsByCampaign(campaignId);
-
-        } else {
-
-            results =
-                    exclusionReasonRepository
-                            .countReasonsByCampaignAndPeriod(
-                                    campaignId,
-                                    start
-                            );
-        }
+        List<Object[]> results = exclusionReasonRepository.countReasons(campaignId, start);
 
         return results.stream()
                 .map(row -> new FilterReasonResponse(
@@ -186,11 +127,28 @@ public class AdminFilterAnalysisService {
 
     private void validateCampaign(Long campaignId) {
 
-        if (!adCampaignRepository.existsById(campaignId)) {
+        if (campaignId != null && !adCampaignRepository.existsById(campaignId)) {
             throw new IllegalArgumentException(
                     "존재하지 않는 캠페인입니다. ID: " + campaignId
             );
         }
+    }
+
+    public Page<java.util.Map<String, Object>> getEvaluations(String period, Long campaignId, AdFilterResult result, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) throw new IllegalArgumentException("Invalid pagination");
+        return evaluationRepository.findRecentEvaluations(campaignId, result, resolveStartDate(period), PageRequest.of(page, size))
+                .map(e -> {
+                    java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                    row.put("id", e.getId());
+                    row.put("campaignId", e.getCampaignId());
+                    row.put("memberId", e.getMemberId());
+                    row.put("nickname", memberRepository.findById(e.getMemberId()).map(m -> m.getNickname()).orElse("회원 #" + e.getMemberId()));
+                    row.put("campaignName", adCampaignRepository.findById(e.getCampaignId()).map(c -> c.getName()).orElse("캠페인 #" + e.getCampaignId()));
+                    row.put("createdAt", e.getCreatedAt());
+                    row.put("result", e.getResult());
+                    row.put("reasons", e.getExclusionReasons().stream().map(r -> new FilterExclusionResponse.ExclusionReasonDetail(r.getReason(), r.getDetail())).toList());
+                    return row;
+                });
     }
 
     public Page<FilterExclusionResponse> getExclusions(

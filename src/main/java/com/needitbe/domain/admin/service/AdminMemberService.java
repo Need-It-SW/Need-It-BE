@@ -20,6 +20,10 @@ import com.needitbe.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Service;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import java.util.Map;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +44,20 @@ public class AdminMemberService {
     private final MemberRepository memberRepository;
 
     private final MemberSanctionRepository sanctionRepository;
+
+    private final SimpMessagingTemplate messagingTemplate;
+
+    private void notifyAccountStatusAfterCommit(Long memberId, String type) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSendToUser(
+                    memberId.toString(), "/queue/account-status",
+                    Map.of("type", type, "memberId", memberId)
+                );
+            }
+        });
+    }
 
     @Transactional
 
@@ -110,6 +128,7 @@ public class AdminMemberService {
         sanctionRepository.save(sanction);
 
         member.suspend();
+        notifyAccountStatusAfterCommit(memberId, "ACCOUNT_SUSPENDED");
 
     }
 
@@ -139,6 +158,7 @@ public class AdminMemberService {
 
         sanction.release();
         member.activate();
+        notifyAccountStatusAfterCommit(memberId, "ACCOUNT_RELEASED");
     }
 
     @Transactional(readOnly = true)

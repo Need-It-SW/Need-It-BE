@@ -19,11 +19,18 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import java.security.Principal;
+import java.util.Map;
+import org.springframework.security.core.Authentication;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
+
+    private static final Logger log = LoggerFactory.getLogger(StompAuthChannelInterceptor.class);
+    private static final String WS_AUTH_KEY = "NEEDIT_WS_AUTH";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberRepository memberRepository;
@@ -96,6 +103,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                     );
 
             accessor.setUser(authentication);
+            // Persist the validated authentication for subsequent STOMP frames.
+            Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+            if (sessionAttributes != null) {
+                sessionAttributes.put(WS_AUTH_KEY, authentication);
+            }
         }
 
         // =====================================================
@@ -105,6 +117,19 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                 || StompCommand.SEND.equals(command)) {
 
             Principal principal = accessor.getUser();
+            // Some transports expose the CONNECT principal only via session attributes
+            // when processing subsequent SUBSCRIBE/SEND frames.
+            if (!(principal instanceof Authentication)) {
+                Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+                Object saved = sessionAttributes == null ? null : sessionAttributes.get(WS_AUTH_KEY);
+                if (saved instanceof Authentication authentication && authentication.isAuthenticated()) {
+                    principal = authentication;
+                    accessor.setUser(authentication);
+                }
+            }
+            log.debug("STOMP {} destination={} session={} principal={}", command,
+                    accessor.getDestination(), accessor.getSessionId(),
+                    principal == null ? "null" : principal.getName());
 
             if (principal == null) {
                 throw new IllegalArgumentException(
@@ -129,9 +154,15 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
             // 관리자 Kafka 행동 로그 실시간 갱신 구독
             if (StompCommand.SUBSCRIBE.equals(command)
-                    && "/topic/admin/user-actions".equals(destination)) {
+                    && ("/topic/admin/user-actions".equals(destination)
+                        || "/topic/admin/ad-statistics".equals(destination)
+                        || "/topic/admin/filter-analysis".equals(destination))) {
 
-                boolean isAdmin = ((org.springframework.security.core.Authentication) principal)
+                if (!(principal instanceof Authentication authentication)) {
+                    log.warn("Admin STOMP subscription rejected: missing authentication, session={}", accessor.getSessionId());
+                    throw new org.springframework.security.access.AccessDeniedException("관리자 인증 정보가 없습니다.");
+                }
+                boolean isAdmin = authentication
                         .getAuthorities()
                         .stream()
                         .anyMatch(authority ->
@@ -140,7 +171,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
                 if (!isAdmin) {
                     throw new org.springframework.security.access.AccessDeniedException(
-                            "관리자만 행동 로그를 구독할 수 있습니다."
+                            "관리자만 관리자 실시간 채널을 구독할 수 있습니다."
                     );
                 }
 
@@ -154,6 +185,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                     && (
                     destination.equals("/user/queue/notifications")
                             || destination.equals("/user/queue/errors")
+                            || destination.equals("/user/queue/account-status")
             )) {
 
                 return message;

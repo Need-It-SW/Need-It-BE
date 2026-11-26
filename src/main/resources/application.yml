@@ -50,3 +50,9 @@ aws:
     bucket: ${AWS_S3_BUCKET}
     region: ap-northeast-2
 
+logging:
+  level:
+    org.springframework.web.socket.messaging: INFO
+    org.springframework.messaging.simp.stomp: INFO
+    com.needitbe.global.security.StompAuthChannelInterceptor: INFO
+

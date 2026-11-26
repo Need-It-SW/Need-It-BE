@@ -141,6 +141,14 @@ public class SecurityConfig {
 
                                 ).permitAll()
 
+                                .requestMatchers(
+
+                                        HttpMethod.GET,
+
+                                        "/api/searches/popular"
+
+                                ).permitAll()
+
 // 나머지는 모두 인증 필요
 
                                 .anyRequest().authenticated()

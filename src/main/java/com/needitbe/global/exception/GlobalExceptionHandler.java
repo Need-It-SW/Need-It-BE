@@ -4,6 +4,7 @@ import com.needitbe.global.common.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -54,6 +55,12 @@ public class GlobalExceptionHandler {
                         "입력값 검증에 실패했습니다.",
                         errors
                 ));
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class, IllegalArgumentException.class})
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("COMMON_400", e.getMessage()));
     }
 
     // 예상하지 못한 서버 오류

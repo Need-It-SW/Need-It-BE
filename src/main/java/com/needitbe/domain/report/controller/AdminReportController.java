@@ -82,6 +82,12 @@ public class AdminReportController {
         );
     }
 
+    @DeleteMapping("/targets/members/{memberId}")
+    public ResponseEntity<ApiResponse<Void>> dismissReportedMember(@PathVariable Long memberId) {
+        reportService.dismissReportedMember(memberId);
+        return ResponseEntity.ok(ApiResponse.success("신고 대상 목록에서 삭제했습니다.", null));
+    }
+
     @GetMapping("/targets/members")
     public ResponseEntity<ApiResponse<Page<ReportedMemberResponse>>> getReportedMembers(
             @RequestParam(defaultValue = "0") int page,

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdEventService {
 
+    private final com.needitbe.domain.ads.websocket.AdStatisticsWebSocketPublisher adStatisticsWebSocketPublisher;
     private final AdImpressionLimitService adImpressionLimitService;
     private final AdEventRepository adEventRepository;
     private final AdCampaignRepository adCampaignRepository;
@@ -93,6 +94,7 @@ public class AdEventService {
 
         // 7. DB 저장
         adEventRepository.save(event);
+        adStatisticsWebSocketPublisher.publishAfterCommit(request.campaignId());
     }
 
     // 광고 클릭 기록
@@ -153,6 +155,7 @@ public class AdEventService {
 
         // 7. DB 저장
         adEventRepository.save(event);
+        adStatisticsWebSocketPublisher.publishAfterCommit(request.campaignId());
     }
 
     // 동일 광고인지 확인

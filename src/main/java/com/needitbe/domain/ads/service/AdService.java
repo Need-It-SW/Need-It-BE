@@ -7,6 +7,8 @@ import com.needitbe.domain.campaign.entity.CampaignStatus;
 import com.needitbe.domain.campaign.repository.CampaignBannerRepository;
 import com.needitbe.domain.member.entity.Member;
 import com.needitbe.domain.member.entity.MemberStatus;
+import com.needitbe.domain.member.entity.MemberRole;
+import org.springframework.transaction.annotation.Propagation;
 import com.needitbe.domain.member.repository.MemberRepository;
 import com.needitbe.domain.request.entity.RequestCategory;
 import com.needitbe.domain.useraction.entity.UserActionLog;
@@ -47,6 +49,37 @@ public class AdService {
     private final UserInterestService userInterestService;
     private final CampaignBannerRepository campaignBannerRepository;
     private final S3Service s3Service;
+
+    /** Kafka 행동 저장 후 개인화 후보를 평가한다. 실제 광고 노출 이벤트는 만들지 않는다. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void evaluateAfterUserAction(Long memberId) {
+        if (memberId == null) return;
+        Member member = memberRepository.findById(memberId).orElse(null);
+        if (member == null || member.getRole() == MemberRole.ADMIN) return;
+        List<AdCampaign> campaigns = campaignBannerRepository.findAll().stream()
+                .filter(cb -> cb.getCampaign().getStatus() == CampaignStatus.RUNNING)
+                .filter(cb -> cb.getCampaign().getAdType() == AdType.PERSONALIZED)
+                .filter(cb -> cb.getBanner().isActive())
+                .map(CampaignBanner::getCampaign)
+                .collect(java.util.stream.Collectors.toMap(AdCampaign::getId, c -> c,
+                        (first, second) -> first, LinkedHashMap::new))
+                .values().stream().toList();
+        if (campaigns.isEmpty()) return;
+        if (member.getStatus() == MemberStatus.SUSPENDED) {
+            for (AdCampaign campaign : campaigns) {
+                adFilterEvaluationService.saveEvaluation(campaign.getId(), memberId,
+                        List.of(AdExclusionReasonType.MEMBER_SUSPENDED));
+            }
+            return;
+        }
+        Map<RequestCategory, Long> scores = userInterestService.getCategoryInterestScores(memberId);
+        Set<String> keywords = userInterestService.getRecentSearchKeywords(memberId);
+        List<UserActionLog> actions = userInterestService.getRecentActions(memberId);
+        for (AdCampaign campaign : campaigns) {
+            adFilterEvaluationService.saveEvaluation(campaign.getId(), memberId,
+                    evaluateCampaign(campaign, memberId, member.getRegion(), scores, keywords, actions));
+        }
+    }
 
     // ==========================================
     // 1. 일반 광고 조회
@@ -99,51 +132,8 @@ public class AdService {
                 .orElseThrow(() ->
                         new CustomException(ErrorCode.MEMBER_NOT_FOUND)
                 );
-        // 제재 회원 개인화 광고 조회 차단 및 제외 사유 기록
-        if (member.getStatus() == MemberStatus.SUSPENDED) {
-
-            log.info(
-                    "제재 회원 개인화 광고 조회 차단 - memberId: {}",
-                    memberId
-            );
-
-            List<CampaignBanner> campaignBanners =
-                    campaignBannerRepository.findByPlacement(placement)
-                            .stream()
-                            .filter(cb ->
-                                    cb.getCampaign().getStatus()
-                                            == CampaignStatus.RUNNING
-                            )
-                            .filter(cb ->
-                                    cb.getCampaign().getAdType()
-                                            == AdType.PERSONALIZED
-                            )
-                            .filter(cb ->
-                                    cb.getBanner().isActive()
-                            )
-                            .toList();
-
-            // 동일 캠페인 중복 평가 방지
-            Set<Long> evaluatedCampaignIds =
-                    new java.util.HashSet<>();
-
-            for (CampaignBanner cb : campaignBanners) {
-
-                Long campaignId = cb.getCampaign().getId();
-
-                if (!evaluatedCampaignIds.add(campaignId)) {
-                    continue;
-                }
-
-                adFilterEvaluationService.saveEvaluation(
-                        campaignId,
-                        memberId,
-                        List.of(
-                                AdExclusionReasonType.MEMBER_SUSPENDED
-                        )
-                );
-            }
-
+        // 관리자 및 제재 회원은 사용자용 개인화 광고를 제공하지 않는다.
+        if (member.getRole() == MemberRole.ADMIN || member.getStatus() == MemberStatus.SUSPENDED) {
             return List.of();
         }
 
@@ -214,44 +204,7 @@ public class AdService {
                         )
                         .toList();
 
-        // ==========================================
-// 광고 후보 평가 결과 저장
-// ==========================================
-
-// 동일 캠페인에 여러 배너가 연결되어 있어도
-// 한 번의 광고 조회 요청에서 캠페인당 한 번만 평가
-        Map<Long, AdCampaign> uniqueCampaigns = new LinkedHashMap<>();
-
-        for (CampaignBanner cb : campaignBanners) {
-
-            AdCampaign campaign = cb.getCampaign();
-
-            if (campaign.getAdType() == AdType.PERSONALIZED) {
-                uniqueCampaigns.putIfAbsent(
-                        campaign.getId(),
-                        campaign
-                );
-            }
-        }
-
-        for (AdCampaign campaign : uniqueCampaigns.values()) {
-
-            List<AdExclusionReasonType> reasons =
-                    evaluateCampaign(
-                            campaign,
-                            memberId,
-                            memberRegion,
-                            interestScores,
-                            searchKeywords,
-                            userActions
-                    );
-
-            adFilterEvaluationService.saveEvaluation(
-                    campaign.getId(),
-                    memberId,
-                    reasons
-            );
-        }
+        // 평가 이력은 Kafka 행동 이벤트에서만 저장한다. 광고 조회는 이력을 생성하지 않는다.
 
         // ==========================================
         // 디버깅 3. 노출 제한 통과 여부

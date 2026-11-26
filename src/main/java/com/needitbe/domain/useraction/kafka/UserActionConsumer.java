@@ -30,7 +30,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserActionConsumer {
 
+    private final com.needitbe.domain.member.repository.MemberRepository memberRepository;
     private final UserActionWebSocketPublisher userActionWebSocketPublisher;
+    private final com.needitbe.domain.ads.service.AdService adService;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
     private final UserActionLogRepository userActionLogRepository;
     private final UserActionFilterService userActionFilterService;
@@ -354,6 +357,10 @@ public class UserActionConsumer {
      */
     private void saveActionLog(UserActionLog actionLog) {
 
+        if (actionLog.getMemberId() != null && memberRepository.findById(actionLog.getMemberId())
+                .map(member -> member.getRole() == com.needitbe.domain.member.entity.MemberRole.ADMIN)
+                .orElse(false)) return;
+
         // 1. 회원 제재 상태 확인
         UserActionFilterDecision decision =
                 userActionFilterService.evaluate(
@@ -384,6 +391,15 @@ public class UserActionConsumer {
                             userActionWebSocketPublisher.publishCreated(
                                     savedLogId
                             );
+                            if (actionLog.getMemberId() != null) {
+                                try {
+                                    adService.evaluateAfterUserAction(actionLog.getMemberId());
+                                    messagingTemplate.convertAndSend("/topic/admin/filter-analysis",
+                                            (Object) java.util.Map.of("type", "FILTER_ANALYSIS_CHANGED"));
+                                } catch (Exception evaluationError) {
+                                    log.error("광고 자동 평가 실패 - logId: {}", savedLogId, evaluationError);
+                                }
+                            }
                         } catch (Exception e) {
                             log.error(
                                     "관리자 행동 로그 WebSocket 알림 실패 - logId: {}",
