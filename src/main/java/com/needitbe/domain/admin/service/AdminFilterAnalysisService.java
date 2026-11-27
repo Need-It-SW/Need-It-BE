@@ -40,6 +40,23 @@ public class AdminFilterAnalysisService {
     private final AdCampaignRepository adCampaignRepository;
     private final com.needitbe.domain.member.repository.MemberRepository memberRepository;
 
+    public List<java.util.Map<String, Object>> getCampaignBreakdown(String period) {
+        java.util.Map<Long, long[]> counts = new java.util.LinkedHashMap<>();
+        for (Object[] row : evaluationRepository.countByCampaignAndResult(resolveStartDate(period))) {
+            long[] c = counts.computeIfAbsent((Long) row[0], k -> new long[2]);
+            c[row[1] == AdFilterResult.SELECTED ? 0 : 1] += ((Number) row[2]).longValue();
+        }
+        return counts.entrySet().stream().map(entry -> {
+            long id = entry.getKey(); long[] c = entry.getValue();
+            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("campaignId", id);
+            row.put("campaignName", adCampaignRepository.findById(id).map(a -> a.getName()).orElse("캠페인 #" + id));
+            row.put("selectedCount", c[0]); row.put("excludedCount", c[1]);
+            row.put("totalEvaluations", c[0]+c[1]);
+            return row;
+        }).toList();
+    }
+
     // ==========================================
     // 1. 고객 필터링 요약 통계
     // ==========================================
@@ -49,7 +66,6 @@ public class AdminFilterAnalysisService {
             String period
     ) {
 
-        validateCampaign(campaignId);
 
         LocalDateTime start = resolveStartDate(period);
 
@@ -79,7 +95,6 @@ public class AdminFilterAnalysisService {
             String period
     ) {
 
-        validateCampaign(campaignId);
 
         LocalDateTime start = resolveStartDate(period);
 

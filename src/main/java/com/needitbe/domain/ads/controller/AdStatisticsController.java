@@ -86,4 +86,12 @@ public class AdStatisticsController {
                 )
         );
     }
+    @GetMapping("/statistics/trend")
+    public ApiResponse<List<AdStatisticsService.DailyStatistics>> getTrend(
+            @RequestParam LocalDateTime start, @RequestParam LocalDateTime end,
+            @RequestParam(required = false) Long campaignId,
+            @RequestParam(required = false) com.needitbe.domain.campaign.entity.AdType adType) {
+        return ApiResponse.success("일별 광고 통계 조회 성공",
+                adStatisticsService.getTrend(start, end, campaignId, adType));
+    }
 }

@@ -4,6 +4,8 @@ import com.needitbe.domain.member.entity.Member;
 import com.needitbe.domain.member.repository.MemberRepository;
 import com.needitbe.domain.report.dto.*;
 import com.needitbe.domain.report.entity.Report;
+import com.needitbe.domain.report.entity.ReportTargetDismissal;
+import com.needitbe.domain.report.repository.ReportTargetDismissalRepository;
 import com.needitbe.domain.report.entity.ReportStatus;
 import com.needitbe.domain.report.entity.ReportType;
 import com.needitbe.domain.report.repository.ReportRepository;
@@ -27,6 +29,7 @@ public class ReportService {
     private final ItemRequestRepository itemRequestRepository;
     private final ReportRepository reportRepository;
     private final MemberRepository memberRepository;
+    private final ReportTargetDismissalRepository reportTargetDismissalRepository;
 
     @Transactional
     public ReportResponse createReport(
@@ -258,7 +261,7 @@ public class ReportService {
      * 관리자 - 신고 대상 사용자 목록에서 제외
      *
      * 회원 자체를 삭제하지 않고,
-     * 해당 회원을 대상으로 접수된 신고 내역을 삭제한다.
+     * 신고 이력을 유지하고 마지막 신고 ID를 기준으로 목록에서 제외한다.
      */
     @Transactional
     public void dismissReportedMember(Long memberId) {
@@ -267,9 +270,17 @@ public class ReportService {
             throw new CustomException(ErrorCode.MEMBER_NOT_FOUND);
         }
 
-        reportRepository.deleteByReportTypeAndTargetId(
-                ReportType.MEMBER,
-                memberId
+        Long lastReportId = reportRepository.findLatestTargetReportId(
+                memberId, ReportType.MEMBER, ReportType.REQUEST
         );
+        if (lastReportId == null) {
+            return;
+        }
+
+        ReportTargetDismissal dismissal = reportTargetDismissalRepository
+                .findById(memberId)
+                .orElseGet(() -> new ReportTargetDismissal(memberId, lastReportId));
+        dismissal.updateLastReportId(Math.max(dismissal.getLastReportId(), lastReportId));
+        reportTargetDismissalRepository.save(dismissal);
     }
 }

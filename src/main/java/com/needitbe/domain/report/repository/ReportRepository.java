@@ -46,15 +46,20 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
                SUM(CASE WHEN r.status = :rejected THEN 1L ELSE 0L END) AS rejectedCount
         FROM Report r
         LEFT JOIN ItemRequest ir ON r.reportType = :requestType AND ir.id = r.targetId
+        LEFT JOIN ReportTargetDismissal d ON d.memberId = CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END
         WHERE r.reportType = :memberType OR (r.reportType = :requestType AND ir.id IS NOT NULL)
         GROUP BY CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END
+        HAVING MAX(r.id) > COALESCE(MAX(d.lastReportId), 0L)
         ORDER BY COUNT(r) DESC, CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END ASC
         """,
             countQuery = """
         SELECT COUNT(DISTINCT CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END)
         FROM Report r
         LEFT JOIN ItemRequest ir ON r.reportType = :requestType AND ir.id = r.targetId
-        WHERE r.reportType = :memberType OR (r.reportType = :requestType AND ir.id IS NOT NULL)
+        WHERE (r.reportType = :memberType OR (r.reportType = :requestType AND ir.id IS NOT NULL))
+          AND r.id > COALESCE((SELECT MAX(d.lastReportId)
+              FROM ReportTargetDismissal d
+              WHERE d.memberId = CASE WHEN r.reportType = :memberType THEN r.targetId ELSE ir.member.id END), 0L)
         """
     )
     Page<ReportedMemberProjection> findReportedMembers(
@@ -66,6 +71,16 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             @Param("rejected") ReportStatus rejected,
             Pageable pageable
     );
+
+    @Query("""
+        SELECT MAX(r.id) FROM Report r
+        LEFT JOIN ItemRequest ir ON r.reportType = :requestType AND ir.id = r.targetId
+        WHERE (r.reportType = :memberType AND r.targetId = :memberId)
+           OR (r.reportType = :requestType AND ir.member.id = :memberId)
+        """)
+    Long findLatestTargetReportId(@Param("memberId") Long memberId,
+                                  @Param("memberType") ReportType memberType,
+                                  @Param("requestType") ReportType requestType);
 
     void deleteByReportTypeAndTargetId(
             ReportType reportType,

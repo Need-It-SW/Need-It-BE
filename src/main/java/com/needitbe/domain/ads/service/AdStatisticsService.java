@@ -73,7 +73,8 @@ public class AdStatisticsService {
                 campaign.getName(),
                 impressions,
                 clicks,
-                ctr
+                ctr,
+                campaign.getAdType()
         );
     }
 
@@ -137,7 +138,8 @@ public class AdStatisticsService {
                 campaign.getName(),
                 impressions,
                 clicks,
-                ctr
+                ctr,
+                campaign.getAdType()
         );
     }
 
@@ -196,5 +198,27 @@ public class AdStatisticsService {
                 clicks,
                 ctr
         );
+    }
+    public record DailyStatistics(String date, long impressions, long clicks, double ctr) {}
+
+    public List<DailyStatistics> getTrend(LocalDateTime start, LocalDateTime end,
+            Long campaignId, com.needitbe.domain.campaign.entity.AdType adType) {
+        if (!start.isBefore(end) || java.time.Duration.between(start, end).compareTo(java.time.Duration.ofDays(366)) > 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "조회 기간은 최대 366일입니다.");
+        }
+        var days = new java.util.LinkedHashMap<String, long[]>();
+        for (var day = start.toLocalDate(); day.atStartOfDay().isBefore(end); day = day.plusDays(1)) {
+            days.put(day.toString(), new long[2]);
+        }
+        for (Object[] row : adEventRepository.dailyStatistics(start, end, campaignId,
+                adType == null ? null : adType.name())) {
+            long[] counts = days.get(row[0].toString());
+            if (counts == null) continue;
+            if ("IMPRESSION".equals(row[1].toString())) counts[0] = ((Number) row[2]).longValue();
+            if ("CLICK".equals(row[1].toString())) counts[1] = ((Number) row[2]).longValue();
+        }
+        return days.entrySet().stream().map(e -> new DailyStatistics(e.getKey(), e.getValue()[0],
+                e.getValue()[1], e.getValue()[0] == 0 ? 0 : Math.round(e.getValue()[1] * 10000.0 / e.getValue()[0]) / 100.0)).toList();
     }
 }

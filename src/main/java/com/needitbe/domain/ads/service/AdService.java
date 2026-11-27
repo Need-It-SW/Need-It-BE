@@ -102,15 +102,11 @@ public class AdService {
                         .filter(cb -> cb.getBanner().isActive())
                         .toList();
 
-        List<CampaignBanner> availableAds =
-                campaignBanners.stream()
-                        .filter(cb ->
-                                adImpressionLimitService.canImpress(
-                                        cb.getCampaign(),
-                                        null
-                                )
-                        )
-                        .toList();
+        Map<Long, Boolean> limits = new LinkedHashMap<>();
+        List<CampaignBanner> availableAds = campaignBanners.stream()
+                .filter(cb -> limits.computeIfAbsent(cb.getCampaign().getId(),
+                        id -> adImpressionLimitService.canImpress(cb.getCampaign(), null)))
+                .toList();
 
         return toAdResponses(availableAds);
     }
@@ -190,187 +186,54 @@ public class AdService {
         log.info("조회 조건 통과 캠페인 ID: {}",
                 campaignBanners.stream()
                         .map(cb -> cb.getCampaign().getId())
+                        .distinct()
                         .toList()
         );
 
-        // 6. 사용자별 광고 노출 제한
-        List<CampaignBanner> availableAds =
-                campaignBanners.stream()
-                        .filter(cb ->
-                                adImpressionLimitService.canImpress(
-                                        cb.getCampaign(),
-                                        memberId
-                                )
-                        )
-                        .toList();
-
-        // 평가 이력은 Kafka 행동 이벤트에서만 저장한다. 광고 조회는 이력을 생성하지 않는다.
-
-        // ==========================================
-        // 디버깅 3. 노출 제한 통과 여부
-        // ==========================================
-
-        log.info("노출 제한 통과 캠페인 ID: {}",
-                availableAds.stream()
-                        .map(cb -> cb.getCampaign().getId())
-                        .toList()
-        );
-
-        // ==========================================
-        // 디버깅 4. 캠페인별 매칭 결과
-        // ==========================================
-
-        availableAds.stream()
-                .filter(cb ->
-                        cb.getCampaign().getAdType()
-                                == AdType.PERSONALIZED
-                )
-                .forEach(cb -> {
-
-                    var campaign = cb.getCampaign();
-
-                    boolean regionMatch = matchesRegion(
-                            memberRegion,
-                            campaign.getTargetRegions()
-                    );
-
-                    boolean keywordMatch = matchesKeywords(
-                            searchKeywords,
-                            campaign.getTargetKeywords()
-                    );
-
-                    String targetCategory =
-                            campaign.getTargetCategory();
-
-                    boolean categoryMatch =
-                            targetCategory != null
-                                    && !targetCategory.isBlank()
-                                    && interestScores.keySet()
-                                    .stream()
-                                    .anyMatch(category ->
-                                            targetCategory.trim()
-                                                    .equalsIgnoreCase(
-                                                            category.name()
-                                                    )
-                                    );
-
-                    boolean actionMatch = matchesTargetAction(
-                            userActions,
-                            campaign.getTargetAction(),
-                            campaign.getTargetCategory()
-                    );
-
-                    log.info("========== 캠페인 {} ==========",
-                            campaign.getId());
-
-                    log.info("캠페인 이름: {}", campaign.getName());
-                    log.info("광고 유형: {}", campaign.getAdType());
-                    log.info("타깃 지역: {}", campaign.getTargetRegions());
-                    log.info("타깃 카테고리: {}", targetCategory);
-                    log.info("타깃 행동: {}", campaign.getTargetAction());
-                    log.info("타깃 키워드: {}", campaign.getTargetKeywords());
-
-                    log.info("지역 매칭: {}", regionMatch);
-                    log.info("키워드 매칭: {}", keywordMatch);
-                    log.info("카테고리 매칭: {}", categoryMatch);
-                    log.info("행동 유형 매칭: {}", actionMatch);
-
-                    log.info("최종 매칭: {}",
-                            regionMatch
-                                    && keywordMatch
-                                    && categoryMatch
-                                    && actionMatch
-                    );
-                });
-
-        // 7. 개인화 광고 필터링 및 우선순위 정렬
-        List<CampaignBanner> matchedAds =
-                availableAds.stream()
-
-                        .filter(cb ->
-                                cb.getCampaign().getAdType()
-                                        == AdType.PERSONALIZED
-                        )
-
-                        .filter(cb ->
-                                matchesRegion(
-                                        memberRegion,
-                                        cb.getCampaign().getTargetRegions()
-                                )
-                        )
-
-                        .filter(cb ->
-                                matchesKeywords(
-                                        searchKeywords,
-                                        cb.getCampaign().getTargetKeywords()
-                                )
-                        )
-
-                        .filter(cb -> {
-
-                            String targetCategory =
-                                    cb.getCampaign().getTargetCategory();
-
-                            if (targetCategory == null
-                                    || targetCategory.isBlank()) {
-                                return false;
-                            }
-
-                            return interestScores.keySet()
-                                    .stream()
-                                    .anyMatch(category ->
-                                            targetCategory.trim()
-                                                    .equalsIgnoreCase(
-                                                            category.name()
-                                                    )
-                                    );
-                        })
-
-                        .filter(cb ->
-                                matchesTargetAction(
-                                        userActions,
-                                        cb.getCampaign().getTargetAction(),
-                                        cb.getCampaign().getTargetCategory()
-                                )
-                        )
-
-                        .sorted(
-                                Comparator.comparingDouble(
-                                        (CampaignBanner cb) ->
-                                                adRankingService.calculateScore(
-                                                        cb.getCampaign(),
-                                                        userActions,
-                                                        interestScores
-                                                )
-                                ).reversed()
-                        )
-
-                        .toList();
-
-        // ==========================================
-        // 디버깅 5. 최종 개인화 광고 결과
-        // ==========================================
-
-        log.info("최종 개인화 광고 캠페인 ID: {}",
-                matchedAds.stream()
-                        .map(cb -> cb.getCampaign().getId())
-                        .toList()
-        );
-
-        // 8. 일반 광고 조회
-        List<CampaignBanner> generalAds =
-                availableAds.stream()
-                        .filter(cb ->
-                                cb.getCampaign().getAdType()
-                                        == AdType.GENERAL
-                        )
-                        .filter(cb ->
-                                matchesRegion(
-                                        memberRegion,
-                                        cb.getCampaign().getTargetRegions()
-                                )
-                        )
-                        .toList();
+        // 요청 내부에서 캠페인별로 한 번만 계산한다. 배너 목록과 순서는 유지한다.
+        Map<Long, AdCampaign> campaigns = new LinkedHashMap<>();
+        for (CampaignBanner cb : campaignBanners) {
+            campaigns.putIfAbsent(cb.getCampaign().getId(), cb.getCampaign());
+        }
+        Map<Long, Double> matchedScores = new LinkedHashMap<>();
+        Set<Long> generalIds = new java.util.HashSet<>();
+        List<Long> availableIds = new ArrayList<>();
+        for (AdCampaign campaign : campaigns.values()) {
+            Long id = campaign.getId();
+            if (!adImpressionLimitService.canImpress(campaign, memberId)) continue;
+            availableIds.add(id);
+            boolean regionMatch = matchesRegion(memberRegion, campaign.getTargetRegions());
+            if (campaign.getAdType() == AdType.GENERAL) {
+                if (regionMatch) generalIds.add(id);
+                continue;
+            }
+            if (campaign.getAdType() != AdType.PERSONALIZED) continue;
+            boolean keywordMatch = matchesKeywords(searchKeywords, campaign.getTargetKeywords());
+            String targetCategory = campaign.getTargetCategory();
+            boolean categoryMatch = targetCategory != null && !targetCategory.isBlank()
+                    && interestScores.keySet().stream().anyMatch(category ->
+                    targetCategory.trim().equalsIgnoreCase(category.name()));
+            boolean actionMatch = matchesTargetAction(userActions, campaign.getTargetAction(), targetCategory);
+            boolean matched = regionMatch && keywordMatch && categoryMatch && actionMatch;
+            log.info("캠페인 {} 매칭: 지역={}, 키워드={}, 카테고리={}, 행동={}, 최종={}",
+                    id, regionMatch, keywordMatch, categoryMatch, actionMatch, matched);
+            if (matched) {
+                matchedScores.put(id, adRankingService.calculateScore(campaign, userActions, interestScores));
+            }
+        }
+        log.info("노출 제한 통과 캠페인 ID: {}", availableIds);
+        // 안정 정렬: 동일 점수의 배너는 기존 조회 순서를 유지한다.
+        List<CampaignBanner> matchedAds = campaignBanners.stream()
+                .filter(cb -> matchedScores.containsKey(cb.getCampaign().getId()))
+                .sorted(Comparator.comparingDouble((CampaignBanner cb) ->
+                        matchedScores.get(cb.getCampaign().getId())).reversed())
+                .toList();
+        log.info("최종 개인화 광고 캠페인 ID: {}", matchedAds.stream()
+                .map(cb -> cb.getCampaign().getId()).distinct().toList());
+        List<CampaignBanner> generalAds = campaignBanners.stream()
+                .filter(cb -> generalIds.contains(cb.getCampaign().getId()))
+                .toList();
+        // 평가 이력은 기존처럼 Kafka 행동 이벤트에서만 저장한다.
 
         // 9. 개인화 광고 우선, 없으면 일반 광고
         List<CampaignBanner> selectedAds =
@@ -381,6 +244,7 @@ public class AdService {
         log.info("최종 반환 캠페인 ID: {}",
                 selectedAds.stream()
                         .map(cb -> cb.getCampaign().getId())
+                        .distinct()
                         .toList()
         );
 

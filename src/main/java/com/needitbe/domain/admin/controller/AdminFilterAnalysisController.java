@@ -29,6 +29,11 @@ public class AdminFilterAnalysisController {
     // 1. 고객 필터링 요약 통계
     // ==========================================
 
+    @GetMapping("/campaign-breakdown")
+    public List<java.util.Map<String, Object>> getCampaignBreakdown(@RequestParam(defaultValue = "7D") String period) {
+        return filterAnalysisService.getCampaignBreakdown(period);
+    }
+
     @GetMapping("/evaluations")
     public Page<java.util.Map<String, Object>> getEvaluations(
             @RequestParam(defaultValue = "7D") String period,

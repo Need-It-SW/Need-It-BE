@@ -130,4 +130,16 @@ public interface AdEventRepository
             @Param("eventType") AdEventType eventType,
             Pageable pageable
     );
+    @Query(value = """
+        SELECT DATE(e.created_at), e.event_type, COUNT(*)
+        FROM ad_events e JOIN ad_campaigns c ON c.id = e.campaign_id
+        WHERE e.created_at >= :start AND e.created_at < :end
+          AND (:campaignId IS NULL OR e.campaign_id = :campaignId)
+          AND (:adType IS NULL OR c.ad_type = :adType)
+        GROUP BY DATE(e.created_at), e.event_type
+        ORDER BY DATE(e.created_at)
+        """, nativeQuery = true)
+    List<Object[]> dailyStatistics(@Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end, @Param("campaignId") Long campaignId,
+            @Param("adType") String adType);
 }

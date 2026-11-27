@@ -5,6 +5,7 @@ public record AdStatisticsResponse(
         String campaignName,
         long impressions,
         long clicks,
-        double ctr
+        double ctr,
+        com.needitbe.domain.campaign.entity.AdType adType
 ) {
 }

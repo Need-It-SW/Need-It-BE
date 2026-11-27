@@ -25,6 +25,14 @@ public interface AdFilterEvaluationRepository
     @Query("SELECT COUNT(e) FROM AdFilterEvaluation e WHERE NOT EXISTS (SELECT m.id FROM Member m WHERE m.id = e.memberId AND m.role = com.needitbe.domain.member.entity.MemberRole.ADMIN) AND (:campaignId IS NULL OR e.campaignId = :campaignId) AND e.result = :result AND (:start IS NULL OR e.createdAt >= :start)")
     long countEvaluationsByResult(@Param("campaignId") Long campaignId, @Param("result") AdFilterResult result, @Param("start") LocalDateTime start);
 
+    @Query("""
+        SELECT e.campaignId, e.result, COUNT(e) FROM AdFilterEvaluation e
+        WHERE NOT EXISTS (SELECT m.id FROM Member m WHERE m.id = e.memberId AND m.role = com.needitbe.domain.member.entity.MemberRole.ADMIN)
+          AND (:start IS NULL OR e.createdAt >= :start)
+        GROUP BY e.campaignId, e.result
+        """)
+    java.util.List<Object[]> countByCampaignAndResult(@Param("start") LocalDateTime start);
+
     // 캠페인별 전체 평가 건수
     long countByCampaignId(Long campaignId);
 

@@ -9,6 +9,7 @@ import com.needitbe.domain.useraction.service.AdminUserActionService;
 import com.needitbe.domain.useraction.dto.AdminUserActionFilterStatisticsResponse;
 
 
+import com.needitbe.domain.useraction.service.CustomerBehaviorService;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.data.domain.Page;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -26,6 +28,7 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class AdminUserActionController {
 
+    private final CustomerBehaviorService customerBehaviorService;
     private final AdminUserActionService adminUserActionService;
 
     @GetMapping
@@ -55,7 +58,7 @@ public class AdminUserActionController {
             Long memberId,
 
             @RequestParam(required = false)
-            UserActionFilterResult filterResult,
+            String filterResult,
 
             @RequestParam(required = false)
             UserActionFilterReason filterReason,
@@ -98,5 +101,18 @@ public class AdminUserActionController {
     @GetMapping("/filter-statistics")
     public AdminUserActionFilterStatisticsResponse getFilterStatistics() {
         return adminUserActionService.getFilterStatistics();
+    }
+
+    @GetMapping("/behavior-analysis")
+    public ResponseEntity<CustomerBehaviorService.Response> getBehaviorAnalysis(
+            @RequestParam(defaultValue = "7D") String period,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        return ResponseEntity.ok(
+                customerBehaviorService.analyze(period, startDate, endDate)
+        );
     }
 }

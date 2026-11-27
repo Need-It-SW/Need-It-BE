@@ -97,7 +97,12 @@ public interface UserActionLogRepository
                   AND (:startDate IS NULL OR u.createdAt >= :startDate)
                   AND (:endDate IS NULL OR u.createdAt < :endDate)
                   AND (:memberId IS NULL OR u.memberId = :memberId)
-                  AND (:filterResult IS NULL OR u.filterResult = :filterResult)
+                  AND (
+                      (:unclassified = true AND u.filterResult IS NULL)
+                      OR
+                      (:unclassified = false AND
+                          (:filterResult IS NULL OR u.filterResult = :filterResult))
+                  )
                   AND (:filterReason IS NULL OR u.filterReason = :filterReason)
                   AND (
                       :search IS NULL
@@ -117,7 +122,7 @@ public interface UserActionLogRepository
                   AND (:startDate IS NULL OR u.createdAt >= :startDate)
                   AND (:endDate IS NULL OR u.createdAt < :endDate)
                   AND (:memberId IS NULL OR u.memberId = :memberId)
-                  AND (:filterResult IS NULL OR u.filterResult = :filterResult)
+                  AND ((:unclassified = true AND u.filterResult IS NULL) OR (:unclassified = false AND (:filterResult IS NULL OR u.filterResult = :filterResult)))
                   AND (:filterReason IS NULL OR u.filterReason = :filterReason)
                   AND (
                       :search IS NULL
@@ -137,6 +142,7 @@ public interface UserActionLogRepository
             @Param("search") String search,
             @Param("memberId") Long memberId,
             @Param("filterResult") UserActionFilterResult filterResult,
+            @Param("unclassified") boolean unclassified,
             @Param("filterReason") UserActionFilterReason filterReason,
             Pageable pageable
     );
@@ -205,6 +211,35 @@ public interface UserActionLogRepository
         """)
     List<Object[]> countByFilterReason(
             @Param("filterResult") UserActionFilterResult filterResult
+    );
+
+    // 고객 행동 분석 - 행동 유형 및 카테고리별 집계
+    @Query("""
+    SELECT u.action, u.category, COUNT(u)
+    FROM UserActionLog u
+    WHERE u.filterResult = :result
+      AND u.createdAt >= :start
+      AND u.createdAt < :end
+    GROUP BY u.action, u.category
+    """)
+    List<Object[]> behaviorGroups(
+            @Param("result") UserActionFilterResult result,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    // 고객 행동 분석 - 활성 회원 수 집계
+    @Query("""
+    SELECT COUNT(DISTINCT u.memberId)
+    FROM UserActionLog u
+    WHERE u.filterResult = :result
+      AND u.createdAt >= :start
+      AND u.createdAt < :end
+    """)
+    long behaviorMembers(
+            @Param("result") UserActionFilterResult result,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
     );
 
 }

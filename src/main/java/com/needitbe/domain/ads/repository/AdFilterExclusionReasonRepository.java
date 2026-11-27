@@ -14,10 +14,12 @@ public interface AdFilterExclusionReasonRepository
         extends JpaRepository<AdFilterExclusionReason, Long> {
 
     @Query("""
-        SELECT r.reason, COUNT(r) FROM AdFilterExclusionReason r
-        WHERE (:campaignId IS NULL OR r.evaluation.campaignId = :campaignId)
+        SELECT r.reason, COUNT(DISTINCT r.evaluation.id) FROM AdFilterExclusionReason r
+        WHERE r.evaluation.result = com.needitbe.domain.ads.entity.AdFilterResult.EXCLUDED
+          AND NOT EXISTS (SELECT m.id FROM Member m WHERE m.id = r.evaluation.memberId AND m.role = com.needitbe.domain.member.entity.MemberRole.ADMIN)
+          AND (:campaignId IS NULL OR r.evaluation.campaignId = :campaignId)
           AND (:start IS NULL OR r.evaluation.createdAt >= :start)
-        GROUP BY r.reason ORDER BY COUNT(r) DESC
+        GROUP BY r.reason ORDER BY COUNT(DISTINCT r.evaluation.id) DESC
         """)
     List<Object[]> countReasons(@Param("campaignId") Long campaignId, @Param("start") LocalDateTime start);
 

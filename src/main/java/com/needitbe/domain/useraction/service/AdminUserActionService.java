@@ -57,7 +57,7 @@ public class AdminUserActionService {
             LocalDate startDate,
             LocalDate endDate,
             Long memberId,
-            UserActionFilterResult filterResult,
+            String filterResult,
             UserActionFilterReason filterReason,
             Pageable pageable
     ) {
@@ -88,6 +88,31 @@ public class AdminUserActionService {
 
         String normalizedSearch = normalizeSearch(search);
 
+        String normalizedFilterResult =
+                filterResult == null || filterResult.isBlank()
+                        ? null
+                        : filterResult.trim().toUpperCase(Locale.ROOT);
+
+        boolean unclassified =
+                "UNCLASSIFIED".equals(normalizedFilterResult);
+
+        UserActionFilterResult parsedFilterResult = null;
+
+        if (normalizedFilterResult != null
+                && !unclassified
+                && !"ALL".equals(normalizedFilterResult)) {
+
+            try {
+                parsedFilterResult =
+                        UserActionFilterResult.valueOf(normalizedFilterResult);
+            } catch (IllegalArgumentException e) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "유효하지 않은 필터 상태입니다."
+                );
+            }
+        }
+
         // 1. 행동 로그 조회
         Page<UserActionLog> logs =
                 userActionLogRepository.searchAdminLogs(
@@ -98,7 +123,8 @@ public class AdminUserActionService {
                         endDateTime,
                         normalizedSearch,
                         memberId,
-                        filterResult,
+                        parsedFilterResult,
+                        unclassified,
                         filterReason,
                         pageable
                 );
